@@ -65,6 +65,56 @@ chmod +x setup.sh
 
 ---
 
+## 💻 CLI Usage
+
+The agent is also available as a standalone CLI tool (no server required):
+
+### Interactive Mode
+
+```bash
+python agent_cli.py
+```
+
+### One-Shot Mode
+
+```bash
+python agent_cli.py "your task here"
+```
+
+### CLI Commands
+
+| Command | Description |
+|---------|-------------|
+| `/help` | Show all available commands |
+| `/clear` | Clear current session |
+| `/status` | Show session info (model, CWD, context size) |
+| `/model <name>` | Switch to a different Ollama model |
+| `/tools` | List all available agent tools |
+| `/ps` | Show background processes |
+| `/kill <id>` | Kill a background process |
+| `/attach <path>` | Attach an image to the next message |
+| `/screenshot <url>` | Take a screenshot of a URL |
+| `/cwd` | Show current working directory |
+| `/cd <path>` | Change working directory |
+| `continue` | Resume a paused session |
+| `exit` / `quit` | Exit the CLI |
+
+### Available Tools
+
+The agent has access to the following tools:
+- `read_file`, `write_file`, `replace_text` — File operations
+- `run_command`, `list_files`, `search_in_files`, `grep` — System operations
+- `create_dir`, `delete_file`, `cd` — Directory management
+- `http_get`, `search_web` — Web operations
+- `python_eval` — Execute Python code
+- `git_status`, `git_diff` — Git operations
+- `screenshot`, `show_image` — Visual operations
+- `ask_human` — Pause for user input
+
+---
+
+---
+
 ## 📖 Documentation
 
 Complete documentation is available in the `docs/` folder:
