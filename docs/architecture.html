@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Architecture - Coding Agent</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #3b82f6;
+            --bg-dark: #0f172a;
+            --text-main: #f8fafc;
+        }
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+        .nav-link {
+            transition: all 0.2s ease;
+            border-left: 3px solid transparent;
+        }
+        .nav-link:hover {
+            background: rgba(59, 130, 246, 0.1);
+            border-left-color: var(--primary);
+        }
+        .card {
+            background: rgba(30, 41, 59, 0.5);
+            border: 1px solid rgba(51, 65, 85, 1);
+            border-radius: 0.75rem;
+        }
+        code {
+            background: #1e293b;
+            padding: 0.2rem 0.4rem;
+            border-radius: 0.25rem;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.9em;
+        }
+        .section-header {
+            position: relative;
+            padding-left: 1.5rem;
+        }
+        .section-header::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 6px;
+            height: 6px;
+            background: var(--primary);
+            border-radius: 50%;
+        }
+    </style>
+</head>
+<body class="flex min-h-screen">
+    <!-- Sidebar -->
+    <aside class="w-64 bg-slate-900 border-r border-slate-800 flex flex-col fixed h-full">
+        <div class="p-6">
+            <div class="flex items-center gap-3 text-blue-400 font-bold text-xl">
+                <i class="fas fa-robot"></i>
+                <span>Coding Agent</span>
+            </div>
+        </div>
+        <nav class="flex-1 px-4 space-y-1">
+            <a href="index.html" class="nav-link block px-4 py-2 rounded text-slate-400 hover:text-white">🏠 Introduction</a>
+            <a href="setup.html" class="nav-link block px-4 py-2 rounded text-slate-400 hover:text-white">🚀 Getting Started</a>
+            <a href="tools.html" class="nav-link block px-4 py-2 rounded text-slate-400 hover:text-white">🛠️ Tool Reference</a>
+            <a href="architecture.html" class="nav-link block px-4 py-2 rounded text-blue-400 font-medium bg-slate-800">🏗️ Architecture</a>
+            <a href="faq.html" class="nav-link block px-4 py-2 rounded text-slate-400 hover:text-white">❓ FAQ</a>
+        </nav>
+        <div class="p-6 text-xs text-slate-500 border-t border-slate-800">
+            v1.0.0 &bull; 2026 Edition
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="ml-64 flex-1 p-12 max-w-5xl">
+        <header class="mb-12">
+            <h1 class="text-5xl font-extrabold mb-4 tracking-tight">System <span class="text-blue-500">Architecture</span></h1>
+            <p class="text-xl text-slate-400 leading-relaxed">
+                A deep dive into the technical design and implementation of the Coding Agent.
+            </p>
+        </header>
+
+        <section class="space-y-12">
+            <!-- Core Architecture -->
+            <div class="card p-8">
+                <h2 class="text-3xl font-bold mb-6 flex items-center gap-3">
+                    <i class="fas fa-sitemap text-blue-500"></i> Core Architecture
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div>
+                        <h3 class="text-xl font-bold mb-4">Backend (Node.js)</h3>
+                        <ul class="space-y-3">
+                            <li class="flex items-start gap-3">
+                                <i class="fas fa-check-circle text-green-400 mt-1"></i>
+                                <span>Express.js server handling API requests</span>
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <i class="fas fa-check-circle text-green-400 mt-1"></i>
+                                <span>Tool execution engine with sandboxed operations</span>
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <i class="fas fa-check-circle text-green-400 mt-1"></i>
+                                <span>Real-time streaming of tool outputs</span>
+                            </li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-bold mb-4">Frontend (React)</h3>
+                        <ul class="space-y-3">
+                            <li class="flex items-start gap-3">
+                                <i class="fas fa-check-circle text-green-400 mt-1"></i>
+                                <span>Vite-powered development environment</span>
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <i class="fas fa-check-circle text-green-400 mt-1"></i>
+                                <span>Real-time log visualization</span>
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <i class="fas fa-check-circle text-green-400 mt-1"></i>
+                                <span>Responsive design for all device sizes</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Security Model -->
+            <div class="card p-8">
+                <h2 class="text-3xl font-bold mb-6 flex items-center gap-3">
+                    <i class="fas fa-shield-alt text-blue-500"></i> Security Model
+                </h2>
+                <div class="space-y-6">
+                    <div class="section-header">
+                        <h3 class="text-xl font-bold">Input Validation</h3>
+                    </div>
+                    <p class="text-slate-400">
+                        All user inputs are validated both client-side and server-side. The agent uses strict schema validation for tool parameters and sanitizes all file paths to prevent directory traversal attacks.
+                    </p>
+
+                    <div class="section-header">
+                        <h3 class="text-xl font-bold">Sandboxed Execution</h3>
+                    </div>
+                    <p class="text-slate-400">
+                        The agent runs in a restricted environment where dangerous operations (like system commands) are limited to specific directories and require explicit user confirmation. The <code class="text-blue-300">run_command</code> tool has built-in safety checks for destructive commands.
+                    </p>
+
+                    <div class="section-header">
+                        <h3 class="text-xl font-bold">No Secrets in Code</h3>
+                    </div>
+                    <p class="text-slate-400">
+                        All sensitive configuration is handled through environment variables. The agent never stores or logs authentication credentials.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Performance Considerations -->
+            <div class="card p-8">
+                <h2 class="text-3xl font-bold mb-6 flex items-center gap-3">
+                    <i class="fas fa-tachometer-alt text-blue-500"></i> Performance Considerations
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div>
+                        <h3 class="text-xl font-bold mb-4">Efficient Tool Execution</h3>
+                        <ul class="space-y-3">
+                            <li class="flex items-start gap-3">
+                                <i class="fas fa-bolt text-yellow-400 mt-1"></i>
+                                <span>Asynchronous tool execution with streaming output</span>
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <i class="fas fa-bolt text-yellow-400 mt-1"></i>
+                                <span>File operations optimized for minimal disk I/O</span>
+                            </li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-bold mb-4">Resource Management</h3>
+                        <ul class="space-y-3">
+                            <li class="flex items-start gap-3">
+                                <i class="fas fa-bolt text-yellow-400 mt-1"></i>
+                                <span>Memory usage monitoring during long operations</span>
+                            </li>
+                            <li class="flex items-start gap-3">
+                                <i class="fas fa-bolt text-yellow-400 mt-1"></i>
+                                <span>Timeouts for all external operations</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <footer class="mt-20 pt-8 border-t border-slate-800 text-center text-slate-500">
+            <p>&copy; 2026 Coding Agent Project. Built for the future of software engineering.</p>
+        </footer>
+    </main>
+</body>
+</html>

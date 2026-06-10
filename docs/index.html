@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coding Agent Documentation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #3b82f6;
+            --bg-dark: #0f172a;
+            --text-main: #f8fafc;
+        }
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+        .nav-link {
+            transition: all 0.2s ease;
+            border-left: 3px solid transparent;
+        }
+        .nav-link:hover {
+            background: rgba(59, 130, 246, 0.1);
+            border-left-color: var(--primary);
+        }
+        .card {
+            background: rgba(30, 41, 59, 0.5);
+            border: 1px solid rgba(51, 65, 85, 1);
+            border-radius: 0.75rem;
+        }
+        code {
+            background: #1e293b;
+            padding: 0.2rem 0.4rem;
+            border-radius: 0.25rem;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body class="flex min-h-screen">
+    <!-- Sidebar -->
+    <aside class="w-64 bg-slate-900 border-r border-slate-800 flex flex-col fixed h-full">
+        <div class="p-6">
+            <div class="flex items-center gap-3 text-blue-400 font-bold text-xl">
+                <i class="fas fa-robot"></i>
+                <span>Coding Agent</span>
+            </div>
+        </div>
+        <nav class="flex-1 px-4 space-y-1">
+            <a href="index.html" class="nav-link block px-4 py-2 rounded text-blue-400 font-medium bg-slate-800">🏠 Introduction</a>
+            <a href="setup.html" class="nav-link block px-4 py-2 rounded text-slate-400 hover:text-white">🚀 Getting Started</a>
+            <a href="tools.html" class="nav-link block px-4 py-2 rounded text-slate-400 hover:text-white">🛠️ Tool Reference</a>
+            <a href="architecture.html" class="nav-link block px-4 py-2 rounded text-slate-400 hover:text-white">🏗️ Architecture</a>
+            <a href="faq.html" class="nav-link block px-4 py-2 rounded text-slate-400 hover:text-white">❓ FAQ</a>
+        </nav>
+        <div class="p-6 text-xs text-slate-500 border-t border-slate-800">
+            v1.0.0 &bull; 2026 Edition
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="ml-64 flex-1 p-12 max-w-5xl">
+        <header class="mb-12">
+            <h1 class="text-5xl font-extrabold mb-4 tracking-tight">Welcome to <span class="text-blue-500">Coding Agent</span></h1>
+            <p class="text-xl text-slate-400 leading-relaxed">
+                A professional-grade, local AI coding assistant powered by Ollama. 
+                Designed for developers who want full control over their environment, 
+                privacy, and speed without relying on cloud-based LLMs.
+            </p>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
+            <div class="card p-6">
+                <div class="text-blue-500 text-2xl mb-3"><i class="fas fa-terminal"></i></div>
+                <h3 class="text-xl font-bold mb-2">CLI Interface</h3>
+                <p class="text-slate-400">Fast, lightweight, and direct. Perfect for quick edits and terminal-centric workflows.</p>
+            </div>
+            <div class="card p-6">
+                <div class="text-green-500 text-2xl mb-3"><i class="fas fa-globe"></i></div>
+                <h3 class="text-xl font-bold mb-2">Web Dashboard</h3>
+                <p class="text-slate-400">A modern React-based UI for a more visual experience, featuring a responsive layout and real-time logs.</p>
+            </div>
+            <div class="card p-6">
+                <div class="text-purple-500 text-2xl mb-3"><i class="fas fa-microchip"></i></div>
+                <h3 class="text-xl font-bold mb-2">Ollama Integration</h3>
+                <p class="text-slate-400">Seamlessly connect to local models like <code>qwen2.5-coder</code> for high-performance code generation.</p>
+            </div>
+            <div class="card p-6">
+                <div class="text-orange-500 text-2xl mb-3"><i class="fas fa-tools"></i></div>
+                <h3 class="text-xl font-bold mb-2">Extensible Toolset</h3>
+                <p class="text-slate-400">Equipped with file system access, shell execution, and web fetching capabilities.</p>
+            </div>
+        </div>
+
+        <section class="space-y-6">
+            <h2 class="text-3xl font-bold mb-4">Core Philosophy</h2>
+            <div class="prose prose-invert text-slate-300 max-w-none">
+                <p class="mb-4">
+                    Coding Agent is built on the principle of <strong>Local-First AI</strong>. By leveraging Ollama, it ensures that your source code never leaves your machine, providing a secure environment for proprietary projects.
+                </p>
+                <ul class="list-disc pl-6 space-y-2">
+                    <li><strong>Privacy:</strong> No data is sent to external servers.</li>
+                    <li><strong>Speed:</strong> Zero latency from cloud API round-trips.</li>
+                    <li><strong>Control:</strong> Swap models instantly to suit the task (e.g., lightweight for edits, heavy for architecture).</li>
+                    <li><strong>Autonomy:</strong> Capable of reading, writing, and executing code to solve complex problems.</li>
+                </ul>
+            </div>
+        </section>
+
+        <footer class="mt-20 pt-8 border-t border-slate-800 text-center text-slate-500">
+            <p>&copy; 2026 Coding Agent Project. Built for the future of software engineering.</p>
+        </footer>
+    </main>
+</body>
+</html>

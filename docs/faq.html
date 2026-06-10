@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FAQ - Coding Agent</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #3b82f6;
+            --bg-dark: #0f172a;
+            --text-main: #f8fafc;
+        }
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+        .nav-link {
+            transition: all 0.2s ease;
+            border-left: 3px solid transparent;
+        }
+        .nav-link:hover {
+            background: rgba(59, 130, 246, 0.1);
+            border-left-color: var(--primary);
+        }
+        .card {
+            background: rgba(30, 41, 59, 0.5);
+            border: 1px solid rgba(51, 65, 85, 1);
+            border-radius: 0.75rem;
+        }
+        code {
+            background: #1e293b;
+            padding: 0.2rem 0.4rem;
+            border-radius: 0.25rem;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.9em;
+        }
+        .faq-item {
+            border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+            padding-bottom: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .faq-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+    </style>
+</head>
+<body class="flex min-h-screen">
+    <!-- Sidebar -->
+    <aside class="w-64 bg-slate-900 border-r border-slate-800 flex flex-col fixed h-full">
+        <div class="p-6">
+            <div class="flex items-center gap-3 text-blue-400 font-bold text-xl">
+                <i class="fas fa-robot"></i>
+                <span>Coding Agent</span>
+            </div>
+        </div>
+        <nav class="flex-1 px-4 space-y-1">
+            <a href="index.html" class="nav-link block px-4 py-2 rounded text-slate-400 hover:text-white">🏠 Introduction</a>
+            <a href="setup.html" class="nav-link block px-4 py-2 rounded text-slate-400 hover:text-white">🚀 Getting Started</a>
+            <a href="tools.html" class="nav-link block px-4 py-2 rounded text-slate-400 hover:text-white">🛠️ Tool Reference</a>
+            <a href="architecture.html" class="nav-link block px-4 py-2 rounded text-slate-400 hover:text-white">🏗️ Architecture</a>
+            <a href="faq.html" class="nav-link block px-4 py-2 rounded text-blue-400 font-medium bg-slate-800">❓ FAQ</a>
+        </nav>
+        <div class="p-6 text-xs text-slate-500 border-t border-slate-800">
+            v1.0.0 &bull; 2026 Edition
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="ml-64 flex-1 p-12 max-w-5xl">
+        <header class="mb-12">
+            <h1 class="text-5xl font-extrabold mb-4 tracking-tight">Frequently Asked <span class="text-blue-500">Questions</span></h1>
+            <p class="text-xl text-slate-400 leading-relaxed">
+                Answers to common questions about setup, security, and usage of the Coding Agent.
+            </p>
+        </header>
+
+        <section class="space-y-8">
+            <div class="card p-8">
+                <div class="faq-item">
+                    <h2 class="text-2xl font-bold mb-4 flex items-center gap-3">
+                        <i class="fas fa-question-circle text-blue-500"></i> Why do I get a 404 error when clicking some navigation links?
+                    </h2>
+                    <p class="text-slate-400 leading-relaxed">
+                        This documentation was initially created with a template navigation that included placeholder links for <code class="text-blue-300">architecture.html</code> and <code class="text-blue-300">faq.html</code>. These pages have now been created to complete the documentation suite. If you're still seeing 404 errors, make sure you've refreshed your browser after the files were created.
+                    </p>
+                </div>
+
+                <div class="faq-item">
+                    <h2 class="text-2xl font-bold mb-4 flex items-center gap-3">
+                        <i class="fas fa-shield-alt text-blue-500"></i> Is it safe to run this agent on my machine?
+                    </h2>
+                    <p class="text-slate-400 leading-relaxed">
+                        The agent is designed with security in mind:
+                        <ul class="list-disc pl-6 mt-2 space-y-1">
+                            <li>All file operations are restricted to the project directory</li>
+                            <li>Shell commands are executed with safety checks</li>
+                            <li>No sensitive data is stored or transmitted</li>
+                        </ul>
+                        However, it's recommended to run the agent in a sandboxed environment (Docker container or VM) for maximum security.
+                    </p>
+                </div>
+
+                <div class="faq-item">
+                    <h2 class="text-2xl font-bold mb-4 flex items-center gap-3">
+                        <i class="fas fa-brain text-blue-500"></i> Which LLM models work best with this agent?
+                    </h2>
+                    <p class="text-slate-400 leading-relaxed">
+                        The agent is optimized for code generation and analysis. Recommended models:
+                        <ul class="list-disc pl-6 mt-2 space-y-1">
+                            <li><code class="text-blue-300">qwen2.5-coder:7b</code> (default, excellent for coding)</li>
+                            <li><code class="text-blue-300">llama3:8b-code</code> (good alternative)</li>
+                            <li><code class="text-blue-300">deepseek-coder:6.7b</code> (specialized for code)</li>
+                        </ul>
+                        You can switch models using the <code class="text-blue-300">/model</code> command in CLI mode.
+                    </p>
+                </div>
+
+                <div class="faq-item">
+                    <h2 class="text-2xl font-bold mb-4 flex items-center gap-3">
+                        <i class="fas fa-terminal text-blue-500"></i> How do I add a new tool to the agent?
+                    </h2>
+                    <p class="text-slate-400 leading-relaxed">
+                        To add a new tool:
+                        <ol class="list-decimal pl-6 mt-2 space-y-1">
+                            <li>Define the tool function in <code class="text-blue-300">agent_server.js</code></li>
+                            <li>Add the tool to the <code class="text-blue-300">tools</code> array with proper schema</li>
+                            <li>Update the documentation in <code class="text-blue-300">docs/tools.html</code></li>
+                        </ol>
+                        Make sure to implement proper input validation and error handling for security.
+                    </p>
+                </div>
+
+                <div class="faq-item">
+                    <h2 class="text-2xl font-bold mb-4 flex items-center gap-3">
+                        <i class="fas fa-sync-alt text-blue-500"></i> How often should I update the agent?
+                    </h2>
+                    <p class="text-slate-400 leading-relaxed">
+                        The agent is designed to be stable, but you should update when:
+                        <ul class="list-disc pl-6 mt-2 space-y-1">
+                            <li>New security patches are available</li>
+                            <li>You need to support new tools or features</li>
+                            <li>There are performance improvements</li>
+                        </ul>
+                        Check the project's GitHub repository for the latest updates.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <footer class="mt-20 pt-8 border-t border-slate-800 text-center text-slate-500">
+            <p>&copy; 2026 Coding Agent Project. Built for the future of software engineering.</p>
+        </footer>
+    </main>
+</body>
+</html>

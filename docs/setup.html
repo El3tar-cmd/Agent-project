@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Getting Started - Coding Agent</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #3b82f6;
+            --bg-dark: #0f172a;
+            --text-main: #f8fafc;
+        }
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+        .nav-link {
+            transition: all 0.2s ease;
+            border-left: 3px solid transparent;
+        }
+        .nav-link:hover {
+            background: rgba(59, 130, 246, 0.1);
+            border-left-color: var(--primary);
+        }
+        .card {
+            background: rgba(30, 41, 59, 0.5);
+            border: 1px solid rgba(51, 65, 85, 1);
+            border-radius: 0.75rem;
+        }
+        code {
+            background: #1e293b;
+            padding: 0.2rem 0.4rem;
+            border-radius: 0.25rem;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.9em;
+        }
+        .step-number {
+            background: var(--primary);
+            color: white;
+            width: 28px;
+            height: 28px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            font-weight: bold;
+            margin-right: 12px;
+        }
+    </style>
+</head>
+<body class="flex min-h-screen">
+    <!-- Sidebar -->
+    <aside class="w-64 bg-slate-900 border-r border-slate-800 flex flex-col fixed h-full">
+        <div class="p-6">
+            <div class="flex items-center gap-3 text-blue-400 font-bold text-xl">
+                <i class="fas fa-robot"></i>
+                <span>Coding Agent</span>
+            </div>
+        </div>
+        <nav class="flex-1 px-4 space-y-1">
+            <a href="index.html" class="nav-link block px-4 py-2 rounded text-slate-400 hover:text-white">🏠 Introduction</a>
+            <a href="setup.html" class="nav-link block px-4 py-2 rounded text-blue-400 font-medium bg-slate-800">🚀 Getting Started</a>
+            <a href="tools.html" class="nav-link block px-4 py-2 rounded text-slate-400 hover:text-white">🛠️ Tool Reference</a>
+            <a href="architecture.html" class="nav-link block px-4 py-2 rounded text-slate-400 hover:text-white">🏗️ Architecture</a>
+            <a href="faq.html" class="nav-link block px-4 py-2 rounded text-slate-400 hover:text-white">❓ FAQ</a>
+        </nav>
+        <div class="p-6 text-xs text-slate-500 border-t border-slate-800">
+            v1.0.0 &bull; 2026 Edition
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="ml-64 flex-1 p-12 max-w-5xl">
+        <header class="mb-12">
+            <h1 class="text-5xl font-extrabold mb-4 tracking-tight">Getting <span class="text-blue-500">Started</span></h1>
+            <p class="text-xl text-slate-400 leading-relaxed">
+                Follow these steps to get your local AI coding agent up and running in minutes.
+            </p>
+        </header>
+
+        <section class="space-y-12">
+            <!-- Prerequisites -->
+            <div class="card p-8">
+                <h2 class="text-2xl font-bold mb-6 flex items-center gap-3">
+                    <i class="fas fa-list-check text-blue-500"></i> Prerequisites
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+                        <h4 class="font-bold mb-2">Node.js & NPM</h4>
+                        <p class="text-sm text-slate-400">Required for the Web UI and backend server.</p>
+                    </div>
+                    <div class="p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+                        <h4 class="font-bold mb-2">Python 3.x</h4>
+                        <p class="text-sm text-slate-400">Required for the CLI version of the agent.</p>
+                    </div>
+                    <div class="p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+                        <h4 class="font-bold mb-2">Ollama</h4>
+                        <p class="text-sm text-slate-400">The engine that runs the LLMs locally.</p>
+                    </div>
+                    <div class="p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+                        <h4 class="font-bold mb-2">Model</h4>
+                        <p class="text-sm text-slate-400">Recommended: <code class="text-blue-300">qwen2.5-coder:7b</code></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Installation Steps -->
+            <div class="space-y-8">
+                <h2 class="text-3xl font-bold mb-6">Installation Steps</h2>
+                
+                <div class="flex gap-4">
+                    <div class="flex-none"><span class="step-number">1</span></div>
+                    <div class="flex-1">
+                        <h3 class="text-xl font-bold mb-2">Install Dependencies</h3>
+                        <p class="text-slate-400 mb-4">Install the necessary Node packages for the web interface.</p>
+                        <div class="bg-black p-4 rounded-lg font-mono text-sm text-green-400 border border-slate-700">
+                            npm install
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex gap-4">
+                    <div class="flex-none"><span class="step-number">2</span></div>
+                    <div class="flex-1">
+                        <h3 class="text-xl font-bold mb-2">Prepare Ollama</h3>
+                        <p class="text-slate-400 mb-4">Ensure Ollama is running and the model is downloaded.</p>
+                        <div class="bg-black p-4 rounded-lg font-mono text-sm text-green-400 border border-slate-700 space-y-2">
+                            <div>ollama serve</div>
+                            <div>ollama pull qwen2.5-coder:7b</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Running Options -->
+            <div class="space-y-6">
+                <h2 class="text-3xl font-bold mb-6">How to Run</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div class="card p-6 border-t-4 border-t-blue-500">
+                        <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+                            <i class="fas fa-terminal text-blue-500"></i> CLI Mode
+                        </h3>
+                        <p class="text-slate-400 mb-4">The fastest way to start. No server required.</p>
+                        <div class="bg-black p-3 rounded font-mono text-xs text-slate-300 mb-4">
+                            python agent_cli.py
+                        </div>
+                        <ul class="text-sm text-slate-400 space-y-2">
+                            <li>• Use <code class="text-blue-300">/model</code> to switch LLMs</li>
+                            <li>• Use <code class="text-blue-300">/tools</code> to see capabilities</li>
+                            <li>• Type <code class="text-blue-300">exit</code> to quit</li>
+                        </ul>
+                    </div>
+
+                    <div class="card p-6 border-t-4 border-t-green-500">
+                        <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+                            <i class="fas fa-desktop text-green-500"></i> Web UI Mode
+                        </h3>
+                        <p class="text-slate-400 mb-4">Full visual experience with real-time logs.</p>
+                        <div class="bg-black p-3 rounded font-mono text-xs text-slate-300 mb-4">
+                            npm run start
+                        </div>
+                        <p class="text-sm text-slate-400 mb-2">Open your browser to:</p>
+                        <a href="http://localhost:5173" class="text-blue-400 font-mono text-sm underline">http://localhost:5173</a>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <footer class="mt-20 pt-8 border-t border-slate-800 text-center text-slate-500">
+            <p>&copy; 2026 Coding Agent Project. Built for the future of software engineering.</p>
+        </footer>
+    </main>
+</body>
+</html>
