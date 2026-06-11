@@ -51,3 +51,4 @@ error.txt
 
 # Documentation (optional - uncomment if you don't want docs in repo)
 # docs/
+.chromium-profile/
