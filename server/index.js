@@ -2,6 +2,9 @@
 //  server/index.js  —  Main Server Entry Point
 // ============================================================
 
+// Load .env file when running locally (Replit uses its own Secrets panel)
+try { require("dotenv").config(); } catch {}
+
 const express = require("express");
 const cors = require("cors");
 const path = require("path");

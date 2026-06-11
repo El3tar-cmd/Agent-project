@@ -16,9 +16,10 @@ import { useEditor } from "./hooks/useEditor";
 import { useAgent } from "./hooks/useAgent";
 
 const TOOLS_LIST = [
-  "read_file", "write_file", "replace_text", "run_command", "list_files",
-  "search_in_files", "create_dir", "delete_file", "http_get", "search_web",
-  "python_eval", "git_status", "git_diff", "grep", "cd"
+  "read_file", "read_lines", "write_file", "append_file", "replace_text",
+  "run_command", "list_files", "search_in_files", "create_dir", "delete_file",
+  "http_get", "search_web", "python_eval", "git_status", "git_diff", "grep",
+  "cd", "think", "screenshot",
 ];
 
 export default function App() {
@@ -27,6 +28,7 @@ export default function App() {
   const [mobileTab, setMobileTab] = useState("chat");
   const [editorH, setEditorH] = useState(45);
   const [previewUrl, setPreviewUrl] = useState("");
+  const [runningProcs, setRunningProcs] = useState(0);
   
   const [showHistory, setShowHistory] = useState(false);
   const [showMemory, setShowMemory] = useState(false);
@@ -43,6 +45,27 @@ export default function App() {
 
   // Link circular dependency via ref
   addSysRef.current = agent.addSys;
+
+  // ── RUNNING PROCESS BADGE ─────────────────────────────────
+  // Subscribe to process stream so the tab badge updates live
+  useEffect(() => {
+    const fetchCount = () =>
+      fetch("/api/processes")
+        .then(r => r.json())
+        .then(ps => setRunningProcs(ps.filter(p => p.status === "running").length))
+        .catch(() => {});
+    fetchCount();
+    const es = new EventSource("/api/processes/stream");
+    es.onmessage = e => {
+      try {
+        const ev = JSON.parse(e.data);
+        if (ev.type === "snapshot") setRunningProcs(ev.processes.filter(p => p.status === "running").length);
+        if (ev.type === "process_start") setRunningProcs(n => n + 1);
+        if (ev.type === "process_end") setRunningProcs(n => Math.max(0, n - 1));
+      } catch {}
+    };
+    return () => es.close();
+  }, []);
 
   // ── VH FIX & RESIZE BINDING ──────────────────────────────
   useEffect(() => {
@@ -101,6 +124,14 @@ export default function App() {
         {PANEL_TABS.map(p => (
           <button key={p.id} className={`ptab${desktopPanel === p.id ? " active" : ""}`} onClick={() => setDesktopPanel(p.id)}>
             <p.Icon width={12} height={12} /> {p.label}
+            {p.id === "processes" && runningProcs > 0 && (
+              <span style={{
+                marginLeft: 3, minWidth: 14, height: 14, borderRadius: 7,
+                background: "var(--cyan)", color: "#000", fontSize: 9, fontWeight: 700,
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                padding: "0 3px", animation: "blink 1.2s infinite"
+              }}>{runningProcs}</span>
+            )}
           </button>
         ))}
         {desktopPanel === "editor" && editor.tabs.map(t => (
@@ -152,11 +183,11 @@ export default function App() {
 
   // ── MOBILE TAB CONTENT ───────────────────────────────────
   const MOBILE_TABS = [
-    { id: "chat",      label: "Chat",      Icon: I.Chat },
-    { id: "editor",    label: "Editor",    Icon: I.File },
-    { id: "terminal",  label: "Terminal",  Icon: I.Term },
-    { id: "processes", label: "Processes", Icon: () => <span style={{ fontSize: 13 }}>⚙️</span> },
-    { id: "swarm",     label: "Swarm",     Icon: () => <span style={{ fontSize: 13 }}>🐝</span> },
+    { id: "chat",      label: "Chat",  Icon: I.Chat },
+    { id: "editor",    label: "Edit",  Icon: I.File },
+    { id: "terminal",  label: "Term",  Icon: I.Term },
+    { id: "processes", label: "Procs", Icon: () => <span style={{ fontSize: 13 }}>⚙️</span> },
+    { id: "swarm",     label: "Swarm", Icon: () => <span style={{ fontSize: 13 }}>🐝</span> },
   ];
 
   const mobileContent = (
@@ -337,7 +368,20 @@ export default function App() {
         <nav className="tabbar">
           {MOBILE_TABS.map(t => (
             <button key={t.id} className={`tab${mobileTab === t.id ? " active" : ""}`} onClick={() => setMobileTab(t.id)}>
-              <t.Icon /><span>{t.label}</span>
+              <span style={{ position:"relative", display:"inline-flex" }}>
+                <t.Icon />
+                {t.id === "processes" && runningProcs > 0 && (
+                  <span style={{
+                    position:"absolute", top:-4, right:-6,
+                    minWidth:13, height:13, borderRadius:7,
+                    background:"var(--cyan)", color:"#000",
+                    fontSize:8, fontWeight:700,
+                    display:"inline-flex", alignItems:"center", justifyContent:"center",
+                    padding:"0 2px", animation:"blink 1.2s infinite"
+                  }}>{runningProcs}</span>
+                )}
+              </span>
+              <span>{t.label}</span>
             </button>
           ))}
         </nav>
