@@ -7,7 +7,6 @@
     "build":    "vite build",
     "preview":  "vite preview",
     "server":   "node server/index.js",
-    "telegram": "node telegram/bot.js",
     "start":    "concurrently \"node server/index.js\" \"vite\""
   },
   "dependencies": {
@@ -16,8 +15,7 @@
     "express":   "^4.18.2",
     "cors":      "^2.8.5",
     "ws":        "^8.16.0",
-    "concurrently":            "^8.2.0",
-    "node-telegram-bot-api":   "^0.66.0"
+    "concurrently":            "^8.2.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.0",
