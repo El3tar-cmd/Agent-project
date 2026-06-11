@@ -10,10 +10,7 @@ import shutil
 from pathlib import Path
 from datetime import datetime
 
-# Import UI elements
 from cli.ui import clr, C, info, ok, warn, err, thought, tool_ev, step_ev, result_ev, print_banner
-
-# Import tools and shared state
 from cli.tools import (
     CWD, _bg_procs, execute_tool, list_processes, kill_process,
     cd, screenshot, UPLOAD_DIR, resolve
@@ -29,7 +26,6 @@ except ImportError:
 
 # ─── STATE FOR CANCELLATION ──────────────────────────────────
 class CancelledError(Exception):
-    """Exception raised when a task is cancelled via Ctrl+C or Ctrl+D."""
     pass
 
 # ─── CONFIG ───────────────────────────────────────────────────
@@ -39,50 +35,72 @@ MAX_STEPS = int(os.getenv("MAX_STEPS", "30"))
 CONTEXT_FILE = ".agent_state.json"
 LOG_FILE = ".agent_log.jsonl"
 MAX_CTX_CHARS = 14_000
+MAX_HISTORY_MSGS = 30
 
-SYSTEM_PROMPT = """You are NOVA — an advanced AI coding agent (2026). You are a senior full-stack engineer with deep expertise in security, testing, performance, and documentation.
+SYSTEM_PROMPT = """You are NOVA — an advanced AI coding agent (2026). Senior full-stack engineer.
 
 ## Available Tools
-read_file(path), write_file(path, content), replace_text(path, old, new),
-run_command(command), list_files(path), search_in_files(pattern, directory),
-create_dir(path), delete_file(path), http_get(url), python_eval(code),
-git_status(), git_diff(file?), grep(pattern, path), cd(path),
-search_web(query), screenshot(url_or_path), ask_human(question),
-show_image(path)
+
+### Filesystem
+- read_file(path) — read file with line numbers
+- read_lines(path, start, end) — read specific line range — USE FOR LARGE FILES
+- write_file(path, content) — create or overwrite file
+- append_file(path, content) — append to file
+- replace_text(path, old, new) — targeted find-and-replace
+- list_files(path) — list directory (call at most ONCE per directory)
+- search_in_files(pattern, directory) — search text across files
+- grep(pattern, path) — regex search
+- create_dir(path) — create directory
+- delete_file(path) — delete file/dir
+
+### Shell & Code
+- run_command(command) — execute shell command
+- python_eval(code) — run Python code
+
+### Git
+- git_status() — git status
+- git_diff(file?) — git diff
+
+### Web
+- http_get(url) — fetch URL content
+- search_web(query) — search DuckDuckGo
+
+### Other
+- screenshot(url_or_path) — take screenshot
+- cd(path) — change directory
+- ask_human(question) — ask user for clarification
+- think(thought) — plan complex tasks before acting
 
 ## Response Format
 ALWAYS respond with ONLY a single valid JSON object. NO markdown, NO extra text.
 
 Use tool: {"thought":"<why>","tool":"<name>","args":{...}}
-Finished: {"thought":"<summary>","final":"<message>"}
+Finished: {"thought":"<summary>","final":"<message to user>"}
 
 ## CRITICAL JSON Rules
 - Output ONLY the JSON object — nothing before or after
 - Never wrap in ```json or any markdown fences
-- Escape all special characters in strings
+- Escape all special characters: newlines → \\n, tabs → \\t, quotes → \\"
+
+## Efficiency Rules — MUST FOLLOW
+1. NEVER call list_files on the same directory more than once
+2. Use read_lines for large files — NOT read_file repeatedly
+3. Use think to plan complex multi-step tasks before starting
+4. Don't re-read files you've already read
+5. Once work is verified, return {"final":"..."} immediately — do NOT loop
 
 ## Engineering Standards (2026)
-When building ANY feature, consider ALL layers:
-1. Backend: API, business logic, validation, error handling, auth
-2. Frontend: UI/UX, accessibility (WCAG 2.2), responsive, performance
-3. Security: Input sanitization, SQL injection, XSS, CSRF, secrets in env vars
-4. Testing: Unit tests, integration tests, edge cases, error paths
-5. Documentation: README, API docs, inline comments, examples
-6. Performance: Caching, indexes, bundle size, lazy loading
-7. DevOps: Config, health checks, logging, graceful shutdown
-
-Rules:
-- NEVER guess file contents — always read_file first
-- Use replace_text for small changes, write_file only for new files
+- Always read_file before editing
+- Use replace_text for small changes, write_file for new files
 - After writing code, verify with run_command
-- Use search_web for documentation lookup
-- Use screenshot to verify visual output
 - Use ask_human when requirements are unclear
-- Always think full-stack — backend + frontend + tests + docs"""
+- Never store secrets in code — use environment variables
+- Handle ALL error cases explicitly"""
 
 # ─── STATE MANAGEMENT ─────────────────────────────────────────
 def save_state(ctx, hist):
-    data = {"saved_at": datetime.now().isoformat(), "context": ctx, "history": hist}
+    capped = hist[-MAX_HISTORY_MSGS:] if len(hist) > MAX_HISTORY_MSGS else hist
+    data = {"saved_at": datetime.now().isoformat(), "context": ctx, "history": capped}
     Path(CONTEXT_FILE).write_text(json.dumps(data, ensure_ascii=False, indent=2))
 
 def load_state():
@@ -100,19 +118,21 @@ def clear_state():
             Path(f).unlink()
 
 def append_log(e):
-    with open(LOG_FILE, "a") as f:
-        f.write(json.dumps(e, ensure_ascii=False) + "\n")
+    try:
+        with open(LOG_FILE, "a") as f:
+            f.write(json.dumps(e, ensure_ascii=False) + "\n")
+    except:
+        pass
 
 # ─── ROBUST JSON PARSER ──────────────────────────────────────
 def clean_json(raw):
     if not raw: return "{}"
-    # Strategy 1: direct parse
     try:
         json.loads(raw)
         return raw
     except:
         pass
-    # Strategy 2: strip fences
+    # Strip fences
     s = re.sub(r'^```(?:json)?\s*', '', raw, flags=re.M)
     s = re.sub(r'\s*```\s*$', '', s, flags=re.M).strip()
     try:
@@ -120,23 +140,15 @@ def clean_json(raw):
         return s
     except:
         pass
-    # Strategy 3: extract first { ... } with brace matching
+    # Extract first { ... } with brace matching
     depth = 0; start = -1; in_str = False; esc = False
     for i, c in enumerate(raw):
-        if esc:
-            esc = False
-            continue
-        if c == '\\' and in_str:
-            esc = True
-            continue
-        if c == '"':
-            in_str = not in_str
-            continue
-        if in_str:
-            continue
+        if esc: esc = False; continue
+        if c == '\\' and in_str: esc = True; continue
+        if c == '"': in_str = not in_str; continue
+        if in_str: continue
         if c == '{':
-            if depth == 0:
-                start = i
+            if depth == 0: start = i
             depth += 1
         elif c == '}':
             depth -= 1
@@ -147,7 +159,7 @@ def clean_json(raw):
                     return candidate
                 except:
                     pass
-    # Strategy 4: manual key extraction as fallback
+    # Manual extraction fallback
     t = re.search(r'"thought"\s*:\s*"((?:[^"\\]|\\.)*)"', raw)
     tl = re.search(r'"tool"\s*:\s*"([^"]+)"', raw)
     fn = re.search(r'"final"\s*:\s*"((?:[^"\\]|\\.)*)"', raw)
@@ -175,10 +187,13 @@ def ask_ollama(messages):
 # ─── AGENT LOOP ───────────────────────────────────────────────
 def run_agent(user_request, context, chat_history, image_paths=None):
     cwd_note = f"\n\n## Current Working Directory\n{CWD[0]}"
-    resume = f"\n\n## Resumed Session\n{context}" if context else ""
+    resume = f"\n\n## Resumed Session Context\n{context}" if context else ""
     sys_p = SYSTEM_PROMPT + cwd_note + resume
 
-    messages = [{"role": "system", "content": sys_p}] + chat_history
+    # Cap history to prevent token explosion
+    capped_history = chat_history[-MAX_HISTORY_MSGS:] if len(chat_history) > MAX_HISTORY_MSGS else chat_history
+
+    messages = [{"role": "system", "content": sys_p}] + capped_history
 
     user_content = user_request
     if image_paths:
@@ -227,6 +242,15 @@ def run_agent(user_request, context, chat_history, image_paths=None):
                 messages.append({"role": "assistant", "content": raw})
                 continue
 
+            # think tool: show thought but don't print result to user
+            if tool_name == "think":
+                t_val = args.get("thought", args.get("reasoning", ""))
+                thought(f"[Planning] {t_val}")
+                messages.append({"role": "assistant", "content": raw})
+                messages.append({"role": "user", "content": f"[Tool result: think]\nThought recorded. Proceed with your plan."})
+                ctx += f"\n\n[Step {n}] think: {t_val[:200]}"
+                continue
+
             tool_ev(tool_name, args)
             result = execute_tool(tool_name, args)
             result_ev(result)
@@ -236,6 +260,7 @@ def run_agent(user_request, context, chat_history, image_paths=None):
             if len(ctx) > MAX_CTX_CHARS:
                 ctx = f"[Original task]\n{user_request}\n\n[...trimmed...]\n\n{ctx[-4000:]}"
             append_log({"step": n, "tool": tool_name, "args": args, "result": str(result)[:300]})
+
         except (KeyboardInterrupt, EOFError):
             warn("Task cancelled.")
             save_state(ctx, messages[1:])
@@ -269,7 +294,7 @@ def main():
 
     pending_images = []
 
-    # One-shot mode: python agent_cli.py "task"
+    # One-shot mode: python -m cli "task"
     if len(sys.argv) > 1:
         task = " ".join(sys.argv[1:])
         try:
@@ -287,8 +312,7 @@ def main():
             user = input(prompt).strip()
         except EOFError:
             print()
-            # Ctrl+D: cancel current task if running, otherwise exit
-            err("Task cancelled.")
+            ok("Bye!")
             break
         except KeyboardInterrupt:
             print()
@@ -298,40 +322,37 @@ def main():
 
         lo = user.lower()
 
-        # Exit
         if lo in ("exit", "quit"):
             ok("Bye!")
             break
 
-        # Help
         if lo == "/help":
             print(f"""
-  {clr(C.BOLD, 'Commands:')}  Ctrl+C / Ctrl+D    Cancel current task
-  exit/quit          Exit
-  /clear             Clear session
-  /status            Session info
-  /log               Last 10 log entries
-  /model <name>      Switch model
-  /tools             List all tools
+  {clr(C.BOLD, 'Commands:')}
+  Ctrl+C             Cancel current task
+  Ctrl+D / exit      Exit the CLI
+  /clear             Clear session state
+  /status            Show session info
+  /log               Show last 10 log entries
+  /model <name>      Switch Ollama model
+  /tools             List all available tools
   /ps                Show background processes
-  /kill <id>         Kill background process
+  /kill <id>         Kill a background process
   /attach <path>     Attach image to next message
-  /screenshot <url>  Take screenshot
+  /screenshot <url>  Take a screenshot
   /cwd               Show current directory
   /cd <path>         Change directory
-  continue           Resume paused session
+  continue           Resume a paused session
 """)
             continue
 
-        # Clear
         if lo == "/clear":
             clear_state()
             context, chat_history = "", []
             pending_images = []
-            ok("Cleared.")
+            ok("Session cleared.")
             continue
 
-        # Status
         if lo == "/status":
             info(f"Model: {MODEL}")
             info(f"CWD: {CWD[0]}")
@@ -341,12 +362,10 @@ def main():
                 info(f"Pending images: {len(pending_images)}")
             continue
 
-        # Process List
         if lo == "/ps":
             list_processes()
             continue
 
-        # Kill Process
         if lo.startswith("/kill "):
             try:
                 kill_process(int(lo.split()[1]))
@@ -354,36 +373,30 @@ def main():
                 err("Usage: /kill <id>")
             continue
 
-        # Switch Model
         if lo.startswith("/model "):
             MODEL = user[7:].strip()
             ok(f"Model: {MODEL}")
             continue
 
-        # List tools
         if lo == "/tools":
             from cli.tools import TOOL_MAP
-            print("\n  " + "\n  ".join(f"• {t}" for t in TOOL_MAP) + "\n")
+            print("\n  " + "\n  ".join(f"• {t}" for t in sorted(TOOL_MAP.keys())) + "\n")
             continue
 
-        # Print current directory
         if lo == "/cwd":
             info(f"CWD: {CWD[0]}")
             continue
 
-        # Change directory
         if lo.startswith("/cd "):
             cd(user[4:].strip())
             continue
 
-        # Attach Image
         if lo.startswith("/attach "):
             img = attach_image(user[8:].strip())
             if img:
                 pending_images.append(img)
             continue
 
-        # Screenshot web page
         if lo.startswith("/screenshot "):
             target = user[12:].strip()
             result = screenshot(target)
@@ -394,7 +407,6 @@ def main():
                 info("Screenshot attached to next message.")
             continue
 
-        # Print logs
         if lo == "/log":
             if Path(LOG_FILE).exists():
                 for line in Path(LOG_FILE).read_text().splitlines()[-10:]:
@@ -407,21 +419,24 @@ def main():
                 info("No log yet.")
             continue
 
-        # Resume task
         if lo == "continue":
             if not context:
                 warn("No paused session.")
                 continue
-            user = "Continue the previous task from where you left off."
+            user = "Continue the previous task from where you left off. Review the context and proceed."
 
-        # Run agent
         imgs = pending_images.copy()
         pending_images.clear()
-        answer, context, chat_history = run_agent(user, context, chat_history, imgs)
+
+        try:
+            answer, context, chat_history = run_agent(user, context, chat_history, imgs)
+        except CancelledError:
+            warn("Task cancelled. Session saved. You can continue later.")
+            continue
 
         print()
         if answer == "PAUSED":
-            warn("Paused. Type 'continue' to resume.")
+            warn("Paused. Type 'continue' to resume, or start a new task.")
         else:
             print(clr(C.BOLD + C.GREEN, "  NOVA:"))
             for line in answer.splitlines():

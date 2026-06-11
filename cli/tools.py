@@ -12,7 +12,6 @@ import threading
 from pathlib import Path
 from datetime import datetime
 
-# Import UI helpers
 from cli.ui import ok, warn, err, info, clr, C
 
 try:
@@ -39,7 +38,7 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 
 CWD = [str(Path.cwd())]  # mutable list to allow updates in other modules
 
-_bg_procs = {}  # id → {cmd, proc, output, status, started}
+_bg_procs = {}
 _bg_id = [0]
 
 # ─── PATH RESOLVER ────────────────────────────────────────────
@@ -48,19 +47,12 @@ def resolve(p):
 
 # ─── BACKGROUND PROCESSES ─────────────────────────────────────
 def bg_run(cmd):
-    """Run command in background, stream output, track process."""
     if any(re.search(p, cmd) for p in DANGEROUS_PATTERNS):
         return None, "BLOCKED"
     _bg_id[0] += 1
     pid = _bg_id[0]
-    entry = {
-        "id": pid,
-        "cmd": cmd,
-        "output": "",
-        "status": "running",
-        "started": datetime.now().isoformat(),
-        "proc": None
-    }
+    entry = {"id": pid, "cmd": cmd, "output": "", "status": "running",
+             "started": datetime.now().isoformat(), "proc": None}
     _bg_procs[pid] = entry
     print(clr(C.CYAN, f"\n  ▶ [{pid}] {cmd[:70]}"))
 
@@ -107,31 +99,66 @@ def kill_process(pid):
         warn(f"Process [{pid}] already stopped")
 
 # ─── INDIVIDUAL TOOLS ─────────────────────────────────────────
+
 def read_file(path):
+    """Read a file with line numbers."""
     try:
-        return Path(resolve(path)).read_text(encoding="utf-8", errors="ignore")
+        content = Path(resolve(path)).read_text(encoding="utf-8", errors="ignore")
+        lines = content.split("\n")
+        return "\n".join(f"{str(i+1).rjust(4)}: {l}" for i, l in enumerate(lines))
+    except Exception as e:
+        return f"ERROR: {e}"
+
+def read_lines(path, start=1, end=None):
+    """Read a specific range of lines from a file."""
+    try:
+        lines = Path(resolve(path)).read_text(encoding="utf-8", errors="ignore").split("\n")
+        total = len(lines)
+        s = max(1, int(start or 1))
+        e = min(total, int(end or total))
+        slice_ = lines[s-1:e]
+        header = f"Lines {s}-{e} of {total} total:\n"
+        return header + "\n".join(f"{str(s+i).rjust(4)}: {l}" for i, l in enumerate(slice_))
     except Exception as e:
         return f"ERROR: {e}"
 
 def write_file(path, content):
+    """Create or overwrite a file."""
     try:
         p = Path(resolve(path))
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content, encoding="utf-8")
-        return f"Saved {path} ({len(content)} chars)"
+        lines = content.count("\n") + 1
+        return f"Saved {path} ({len(content)} chars, {lines} lines)"
+    except Exception as e:
+        return f"ERROR: {e}"
+
+def append_file(path, content):
+    """Append content to an existing file (or create it)."""
+    try:
+        p = Path(resolve(path))
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with open(str(p), "a", encoding="utf-8") as f:
+            f.write(content)
+        return f"Appended to {path} ({len(content)} chars)"
     except Exception as e:
         return f"ERROR: {e}"
 
 def replace_text(path, old, new):
+    """Replace first occurrence of old with new in file."""
     try:
         abs_p = resolve(path)
         t = Path(abs_p).read_text(encoding="utf-8", errors="ignore")
         if old not in t:
-            return f"ERROR: pattern not found in {path}"
+            return f"ERROR: pattern not found in {path}. Check exact whitespace and quotes."
         Path(abs_p).write_text(t.replace(old, new, 1), encoding="utf-8")
         return f"Updated {path}"
     except Exception as e:
         return f"ERROR: {e}"
+
+def think(thought):
+    """Explicit reasoning step — no side effects."""
+    return f"Thought recorded. Proceed with your plan."
 
 def run_command_stream(cmd, background=False):
     if any(re.search(p, cmd) for p in DANGEROUS_PATTERNS):
@@ -164,7 +191,10 @@ def list_files(path="."):
 
 def search_in_files(pattern, directory="."):
     results = []
+    ignore = {".git", "node_modules", ".next", "dist", "build", "__pycache__", ".venv"}
     for p in Path(resolve(directory)).rglob("*"):
+        if any(part in ignore for part in p.parts):
+            continue
         if p.is_file():
             try:
                 for i, line in enumerate(p.read_text(encoding="utf-8", errors="ignore").splitlines(), 1):
@@ -212,17 +242,71 @@ def http_get(url):
         return f"ERROR: {e}"
 
 def search_web(query):
+    """Search DuckDuckGo and return top results."""
     url = f"https://html.duckduckgo.com/html/?q={requests.utils.quote(query)}&kl=us-en"
-    headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"}
+    headers = {
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,*/*;q=0.8",
+    }
     try:
         r = requests.get(url, timeout=12, headers=headers)
         links = re.findall(r'class="result__a"[^>]*>([^<]+)', r.text)
         snips = re.findall(r'class="result__snippet"[^>]*>([\s\S]*?)</a>', r.text)
+        urls  = re.findall(r'class="result__url"[^>]*>([^<]+)', r.text)
         results = []
         for i, (l, s) in enumerate(zip(links[:6], snips[:6])):
-            s = re.sub(r'<[^>]+>', '', s).strip()
-            results.append(f"[{i+1}] {l.strip()}\n{s}")
+            s_clean = re.sub(r'<[^>]+>', '', s).strip()
+            url_str = urls[i].strip() if i < len(urls) else ""
+            results.append(f"[{i+1}] {l.strip()}\n{s_clean}\n{url_str}")
         return "\n\n".join(results) if results else f"No results for: {query}"
+    except Exception as e:
+        return f"ERROR: {e}"
+
+def python_eval(code):
+    """Execute Python code and return output."""
+    import io, contextlib
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf):
+            exec(code, {"__builtins__": __builtins__})
+        return buf.getvalue().strip() or "(no output)"
+    except Exception as e:
+        return f"ERROR: {e}"
+
+def git_status():
+    try:
+        r = subprocess.run(["git", "status"], capture_output=True, text=True, cwd=CWD[0])
+        return r.stdout.strip() or r.stderr.strip()
+    except Exception as e:
+        return f"ERROR: {e}"
+
+def git_diff(file=None):
+    try:
+        cmd = ["git", "diff"]
+        if file:
+            cmd.append(resolve(file))
+        r = subprocess.run(cmd, capture_output=True, text=True, cwd=CWD[0])
+        return r.stdout.strip() or "(no changes)"
+    except Exception as e:
+        return f"ERROR: {e}"
+
+def grep(pattern, path="."):
+    try:
+        cmd = f'grep -rn --include="*.py" --include="*.js" --include="*.ts" --include="*.json" --include="*.md" --exclude-dir=node_modules --exclude-dir=.git "{pattern}" "{resolve(path)}"'
+        r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=15, cwd=CWD[0])
+        return r.stdout.strip() or "(no matches)"
+    except Exception as e:
+        return f"ERROR: {e}"
+
+def cd(path):
+    try:
+        abs_p = resolve(path)
+        if not Path(abs_p).exists():
+            return f"ERROR: directory not found: {abs_p}"
+        if not Path(abs_p).is_dir():
+            return f"ERROR: not a directory: {abs_p}"
+        CWD[0] = abs_p
+        return f"CWD changed to: {CWD[0]}"
     except Exception as e:
         return f"ERROR: {e}"
 
@@ -235,8 +319,8 @@ def screenshot(url_or_path):
         else:
             return f"ERROR: not found: {target}"
     out = SCREENSHOT_DIR / f"shot_{int(datetime.now().timestamp())}.png"
-    
-    # Try Puppeteer
+
+    # Try Puppeteer via Node.js
     node_script = f"""
 const p=require('puppeteer');p.launch({{headless:'new',args:['--no-sandbox','--disable-setuid-sandbox']}}).then(async b=>{{
   const pg=await b.newPage();await pg.setViewport({{width:1280,height:800}});
@@ -253,18 +337,20 @@ const p=require('puppeteer');p.launch({{headless:'new',args:['--no-sandbox','--d
             return f"SCREENSHOT:{out}\nURL:{target}"
     except:
         pass
-        
-    # Try CLI fallbacks
-    for cmd in [f'chromium-browser --headless --screenshot="{out}" --window-size=1280,800 "{target}" 2>/dev/null',
-                f'google-chrome --headless --screenshot="{out}" --window-size=1280,800 "{target}" 2>/dev/null']:
+
+    # Fallback: CLI tools
+    for cmd in [
+        f'chromium-browser --headless --screenshot="{out}" --window-size=1280,800 "{target}" 2>/dev/null',
+        f'google-chrome --headless --screenshot="{out}" --window-size=1280,800 "{target}" 2>/dev/null',
+    ]:
         try:
             subprocess.run(cmd, shell=True, timeout=30, check=True)
             if out.exists() and out.stat().st_size > 0:
                 return f"SCREENSHOT:{out}\nURL:{target}"
         except:
             pass
-    
-    # Try Remote Service Fallback (screenshot-service alongside this file)
+
+    # Termux fallback (dynamic path)
     try:
         service_dir = Path(__file__).resolve().parent.parent / "tools" / "screenshot-service"
         remote_script = f"""
@@ -274,13 +360,13 @@ from screenshot import take_screenshot
 success = take_screenshot('{target}', '{out}')
 sys.exit(0 if success else 1)
 """
-        res = subprocess.run([sys.executable, "-c", remote_script], capture_output=True, timeout=30)
+        subprocess.run([sys.executable, "-c", remote_script], capture_output=True, timeout=30)
         if out.exists() and out.stat().st_size > 0:
             return f"SCREENSHOT:{out}\nURL:{target}"
     except Exception:
         pass
-        
-    return f"ERROR: Screenshot failed. Install puppeteer: npm install puppeteer\nTarget was: {target}"
+
+    return f"ERROR: Screenshot failed. Install puppeteer (npm install puppeteer) or chromium-browser.\nTarget: {target}"
 
 def show_image(path):
     abs_p = resolve(path)
@@ -289,86 +375,38 @@ def show_image(path):
     for viewer in ["eog", "display", "feh", "xdg-open", "open"]:
         try:
             subprocess.Popen([viewer, abs_p], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            ok(f"Opening image: {abs_p}")
-            return f"Opened in viewer: {abs_p}"
-        except:
-            pass
-    return f"Image at: {abs_p} (no viewer found — try opening manually)"
+            return f"Opening {abs_p} with {viewer}"
+        except FileNotFoundError:
+            continue
+    return f"No image viewer found. File at: {abs_p}"
 
-def python_eval(code):
-    try:
-        import io
-        import contextlib
-        buf = io.StringIO()
-        with contextlib.redirect_stdout(buf):
-            exec(code, {"__builtins__": __builtins__})
-        out = buf.getvalue()
-        for line in out.split("\n")[:10]:
-            print(clr(C.DIM, f"    {line}"))
-        return out or "(no output)"
-    except Exception as e:
-        return f"ERROR: {e}"
-
-def git_status():
-    return run_command_stream("git status", background=False)
-
-def git_diff(file=""):
-    return run_command_stream(f"git diff {file}".strip())
-
-def grep(pattern, path="."):
-    return run_command_stream(f'grep -rn "{pattern}" "{resolve(path)}"')
-
-def cd(path):
-    abs_p = resolve(path)
-    if not Path(abs_p).is_dir():
-        return f"ERROR: not a directory: {abs_p}"
-    CWD[0] = abs_p
-    ok(f"CWD → {abs_p}")
-    return f"CWD: {abs_p}"
-
-def ask_human(question):
-    print(clr(C.CYAN + C.BOLD, f"\n  ❓ Agent asks: {question}"))
-    try:
-        answer = input(clr(C.YELLOW, "  Your answer: ")).strip()
-    except:
-        answer = ""
-    return answer or "(no answer)"
-
-# ─── TOOL DISPATCH MAP ────────────────────────────────────────
+# ─── TOOL MAP ─────────────────────────────────────────────────
 TOOL_MAP = {
     "read_file":       lambda a: read_file(a.get("path", "")),
-    "write_file":      lambda a: write_file(a.get("path", ""), a.get("content", "")),
-    "replace_text":    lambda a: replace_text(a.get("path", ""), a.get("old", ""), a.get("new", "")),
-    "run_command":     lambda a: run_command_stream(a.get("command", ""), a.get("background", False)),
-    "list_files":      lambda a: list_files(a.get("path", ".")),
-    "search_in_files": lambda a: search_in_files(a.get("pattern", ""), a.get("directory", ".")),
-    "create_dir":      lambda a: create_dir(a.get("path", "")),
+    "read_lines":      lambda a: read_lines(a.get("path", ""), a.get("start", 1), a.get("end")),
+    "write_file":      lambda a: write_file(a.get("path", ""), a.get("content", a.get("text", ""))),
+    "append_file":     lambda a: append_file(a.get("path", ""), a.get("content", a.get("text", ""))),
+    "replace_text":    lambda a: replace_text(a.get("path", ""), a.get("old", a.get("old_text", "")), a.get("new", a.get("new_text", a.get("replacement", "")))),
+    "list_files":      lambda a: list_files(a.get("path", a.get("directory", "."))),
+    "search_in_files": lambda a: search_in_files(a.get("pattern", a.get("search", "")), a.get("directory", a.get("dir", "."))),
+    "create_dir":      lambda a: create_dir(a.get("path", a.get("directory", ""))),
     "delete_file":     lambda a: delete_file(a.get("path", "")),
-    "http_get":        lambda a: http_get(a.get("url", "")),
+    "run_command":     lambda a: run_command_stream(a.get("command", a.get("cmd", ""))),
+    "run_background":  lambda a: run_command_stream(a.get("command", ""), background=True),
     "python_eval":     lambda a: python_eval(a.get("code", "")),
     "git_status":      lambda a: git_status(),
-    "git_diff":        lambda a: git_diff(a.get("file", "")),
-    "grep":            lambda a: grep(a.get("pattern", ""), a.get("path", ".")),
-    "cd":              lambda a: cd(a.get("path", ".")),
+    "git_diff":        lambda a: git_diff(a.get("file")),
+    "grep":            lambda a: grep(a.get("pattern", a.get("search", "")), a.get("path", a.get("directory", "."))),
+    "http_get":        lambda a: http_get(a.get("url", "")),
     "search_web":      lambda a: search_web(a.get("query", a.get("q", a.get("search", "")))),
-    "screenshot":      lambda a: screenshot(a.get("url", a.get("path", a.get("file", "")))),
-    "show_image":      lambda a: show_image(a.get("path", a.get("file", ""))),
-    "ask_human":       lambda a: ask_human(a.get("question", a.get("q", "Can you clarify?"))),
+    "screenshot":      lambda a: screenshot(a.get("url_or_path", a.get("url", a.get("path", "")))),
+    "show_image":      lambda a: show_image(a.get("path", "")),
+    "cd":              lambda a: cd(a.get("path", a.get("dir", ""))),
+    "think":           lambda a: think(a.get("thought", a.get("reasoning", ""))),
 }
-
-CONFIRM_TOOLS = {"delete_file"}
 
 def execute_tool(name, args):
     fn = TOOL_MAP.get(name)
-    if not fn:
-        return f"ERROR: unknown tool '{name}'"
-    if name in CONFIRM_TOOLS:
-        preview = args.get("path", "")
-        warn(f"DELETE: {preview}")
-        try:
-            yn = input(clr(C.YELLOW, "  Confirm? [y/N] ")).strip().lower()
-        except:
-            yn = "n"
-        if yn != "y":
-            return "Cancelled."
-    return fn(args)
+    if fn:
+        return str(fn(args))
+    return f"ERROR: unknown tool '{name}'. Available: {', '.join(TOOL_MAP.keys())}"

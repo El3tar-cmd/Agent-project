@@ -6,46 +6,44 @@ const { getCWD } = require("../server/lib/cwd");
 const { askOllama } = require("../server/lib/ollama");
 const { cleanJson } = require("../shared/json");
 const { SUB_AGENTS } = require("./agents");
-const { TOOLS } = require("./tools");
+const { TOOLS, WRITE_TOOLS, WRITE_REQUIRED_AGENTS } = require("./tools");
 const { SWARM_MAX_STEPS, SWARM_STEP_TIMEOUT } = require("../shared/constants");
 
 const TOOL_DOCS = `
 ## Available Tools & Parameter Schemas
-- read_file: {"path": "relative/or/absolute/file/path"}
-  Description: Reads the contents of a file.
-- write_file: {"path": "relative/or/absolute/file/path", "content": "full contents of the file"}
-  Description: Creates a new file or overwrites an existing file.
-- replace_text: {"path": "relative/or/absolute/file/path", "old": "exact old text to replace", "new": "new replacement text"}
-  Description: Replaces a specific block of text in a file.
-- run_command: {"command": "shell command string"}
-  Description: Runs a command in the terminal.
-- list_files: {"path": "directory path"}
-  Description: Lists files in a directory.
-- search_in_files: {"pattern": "search pattern", "directory": "directory to search"}
-  Description: Searches for text patterns across files.
-- create_dir: {"path": "directory path"}
-  Description: Creates a directory recursively.
-- delete_file: {"path": "file or directory path"}
-  Description: Deletes a file or directory.
-- python_eval: {"code": "python code"}
-  Description: Evaluates python code.
-- git_status: {}
-  Description: Gets the current git status.
-- git_diff: {"file": "optional file path"}
-  Description: Gets the current git diff.
-- grep: {"pattern": "regex pattern", "path": "directory path"}
-  Description: Runs grep in the workspace.
-- cd: {"path": "directory path"}
-  Description: Changes the current working directory.
-- search_web: {"query": "search term"}
-  Description: Searches DuckDuckGo.
-- screenshot: {"url_or_path": "url or file path"}
-  Description: Takes a screenshot of a URL or HTML file.
 
-## CRITICAL RULES FOR MULTI-AGENT SWARM:
-1. **TOOL USAGE IS REQUIRED**: If your task requires you to create, modify, delete, or run files/scripts, you **MUST** invoke the correct tool (e.g., 'write_file', 'replace_text', 'run_command'). Do **NOT** just provide the code in your 'thought' or 'result' fields and assume it will be written. If you don't call the tool, the file will not be changed.
-2. **JSON Format**: Respond ONLY with a single valid JSON object. No markdown block wrapping (no \`\`\`json). Escape all newlines as \\n inside JSON string values.
-3. **Execution Loop**: You can call one tool per step. Once you run a tool, the framework will execute it and return the result as a user message in the next step. Inspect the result, then call another tool or finish.
+### Filesystem
+- read_file: {"path": "file path"} — reads file with line numbers
+- read_lines: {"path": "file path", "start": 1, "end": 50} — read a specific range of lines
+- write_file: {"path": "file path", "content": "full file content"} — creates/overwrites a file
+- append_file: {"path": "file path", "content": "text to append"} — appends to a file
+- replace_text: {"path": "file path", "old": "exact text to find", "new": "replacement text"} — targeted edit
+- list_files: {"path": "directory path"} — lists files (call ONCE per directory — do not repeat)
+- search_in_files: {"pattern": "search text", "directory": "path"} — search across files
+- grep: {"pattern": "regex", "path": "directory"} — grep search
+- create_dir: {"path": "directory path"}
+- delete_file: {"path": "path"}
+
+### Shell & Code
+- run_command: {"command": "shell command"} — run shell command
+- python_eval: {"code": "python code"} — run Python code
+
+### Git
+- git_status: {} — git status
+- git_diff: {"file": "optional path"} — git diff
+
+### Reasoning
+- think: {"thought": "your reasoning"} — plan before acting on complex tasks
+
+## CRITICAL RULES FOR MULTI-AGENT SWARM
+1. **TOOL CALLS ARE REQUIRED**: You MUST use write_file, append_file, or replace_text to actually save files.
+   Simply including file contents in your "result" field does NOT save anything to disk.
+2. **JSON Format**: Respond ONLY with a single valid JSON object. No markdown, no code fences.
+   Escape all newlines as \\n inside JSON strings.
+3. **No repeated list_files**: Call list_files on any directory at most once. Use that knowledge.
+4. **Use read_lines**: For large files, use read_lines with start/end instead of reading the whole file again.
+5. **Execution Loop**: Call one tool per step, wait for result, then call next tool or finish.
+6. **Finish with result**: {"thought":"summary","result":"what was accomplished","files_changed":["path1"]}
 `;
 
 /**
@@ -55,19 +53,23 @@ async function runSubAgent({ agentId, task, context, model, onEvent, maxSteps = 
   const agentDef = SUB_AGENTS[agentId];
   if (!agentDef) throw new Error(`Unknown agent: ${agentId}`);
 
+  const requiresWrite = WRITE_REQUIRED_AGENTS.has(agentId);
+
   const messages = [
-    { 
-      role: "system", 
-      content: `${agentDef.system}\n\n[CWD]: ${getCWD()}\n\n${TOOL_DOCS}${context ? `\n\n[CONTEXT FROM PREVIOUS AGENTS]\n${context}` : ""}` 
+    {
+      role: "system",
+      content: `${agentDef.system}\n\n[CWD]: ${getCWD()}\n\n${TOOL_DOCS}${context ? `\n\n[CONTEXT FROM PREVIOUS AGENTS]\n${context}` : ""}`
     },
-    { role: "user",   content: task },
+    { role: "user", content: task },
   ];
 
   onEvent({ type: "agent_start", agent: agentId, task });
 
   let toolsUsed = 0;
+  let writeToolsUsed = 0;
   let noToolRetries = 0;
   const MAX_NO_TOOL_RETRIES = 3;
+  const listedDirs = new Set(); // track listed directories to detect repetition
 
   for (let step = 1; step <= maxSteps; step++) {
     onEvent({ type: "agent_step", agent: agentId, step, message: `${agentDef.emoji} ${agentDef.name} — step ${step}` });
@@ -75,7 +77,7 @@ async function runSubAgent({ agentId, task, context, model, onEvent, maxSteps = 
     if (step === maxSteps) {
       messages.push({
         role: "user",
-        content: `CRITICAL: This is your absolute LAST step. You MUST NOT call any more tools. Summarize all your findings and work so far, and finish by returning the Finished JSON format: {"thought": "summary of findings so far", "result": "your findings", "context": {...}}`
+        content: `CRITICAL: This is your LAST step (${step}/${maxSteps}). You MUST finish now.\n${requiresWrite && writeToolsUsed === 0 ? "WARNING: You have NOT called write_file/append_file/replace_text yet! You must write your output to a file NOW, then return your result." : "Summarize all work done and return your result."}\nFormat: {"thought":"summary","result":"accomplishments","files_changed":["path"]}`
       });
     }
 
@@ -91,22 +93,15 @@ async function runSubAgent({ agentId, task, context, model, onEvent, maxSteps = 
     try {
       const cleaned = cleanJson(raw);
       data = JSON.parse(cleaned);
-      
       if (data.__plain__ || (!data.tool && data.result === undefined && data.final === undefined)) {
         throw new Error("Plain text or incomplete JSON response");
       }
-    } catch (err) {
-      onEvent({ type: "agent_thought", agent: agentId, message: "⚠️ Response format invalid. Prompting for correct JSON..." });
+    } catch {
+      onEvent({ type: "agent_thought", agent: agentId, message: "⚠️ Invalid JSON format — re-prompting…" });
       messages.push({ role: "assistant", content: raw });
       messages.push({
         role: "user",
-        content: `ERROR: Your response was not formatted as a valid JSON object.
-You must respond with ONLY a single JSON object.
-If you want to use a tool, respond with:
-{"thought": "reasoning", "tool": "tool_name", "args": {...}}
-
-If you are finished, respond with:
-{"thought": "reasoning", "result": "accomplishments summary", "files_changed": [...]}`
+        content: `ERROR: Your response was not valid JSON. Respond with ONLY a JSON object:\n- To use a tool: {"thought":"reasoning","tool":"tool_name","args":{...}}\n- To finish: {"thought":"reasoning","result":"summary","files_changed":["paths"]}`
       });
       continue;
     }
@@ -119,9 +114,25 @@ If you are finished, respond with:
     const args = data.args || {};
 
     if (toolName && typeof toolName === "string" && toolName.trim() !== "") {
+      // Warn about repeated list_files on same directory
+      if (toolName === "list_files") {
+        const dir = args.path || args.directory || args.dir || ".";
+        if (listedDirs.has(dir)) {
+          onEvent({ type: "agent_thought", agent: agentId, message: `⚠️ Skipping duplicate list_files for: ${dir}` });
+          messages.push({ role: "assistant", content: raw });
+          messages.push({ role: "user", content: `You already listed "${dir}". Use that information instead of listing it again. Proceed with your next action.` });
+          continue;
+        }
+        listedDirs.add(dir);
+      }
+
       toolsUsed++;
+      if (WRITE_TOOLS.has(toolName)) writeToolsUsed++;
+
       const fn = TOOLS[toolName];
-      const toolResult = fn ? String(await Promise.resolve(fn(args))) : `ERROR: unknown tool '${toolName}'`;
+      const toolResult = fn
+        ? String(await Promise.resolve(fn(args)))
+        : `ERROR: unknown tool '${toolName}'. Available: ${Object.keys(TOOLS).join(", ")}`;
 
       onEvent({ type: "agent_tool", agent: agentId, tool: toolName, args, result: toolResult.slice(0, 500) });
 
@@ -132,18 +143,39 @@ If you are finished, respond with:
 
     // Finished?
     if (data.result !== undefined || data.final !== undefined) {
-      if (toolsUsed === 0) {
+      // If this agent is required to write files but hasn't — push back
+      if (requiresWrite && writeToolsUsed === 0) {
         noToolRetries++;
         if (noToolRetries >= MAX_NO_TOOL_RETRIES) {
-          // Accept the result after max retries to prevent infinite loop
+          // Accept after max retries to prevent infinite loop
           const result = data.result ?? data.final;
           onEvent({ type: "agent_done", agent: agentId, result, data });
           return { agent: agentId, result, data, steps: step };
         }
         messages.push({ role: "assistant", content: raw });
-        messages.push({ role: "user", content: `ERROR: You cannot finish without using any tools! You MUST use at least one tool (like 'list_files', 'read_file', 'write_file', or 'run_command') to perform actual work or gather information before returning a result. (Attempt ${noToolRetries}/${MAX_NO_TOOL_RETRIES})` });
+        messages.push({
+          role: "user",
+          content: `ERROR: Your task requires you to WRITE files to disk. You have only read files so far.\nYou MUST call write_file, append_file, or replace_text to save your output.\nDo NOT return a result until you have written at least one file. (Attempt ${noToolRetries}/${MAX_NO_TOOL_RETRIES})`
+        });
         continue;
       }
+
+      // If toolsUsed === 0 (no tools at all) — push back
+      if (toolsUsed === 0) {
+        noToolRetries++;
+        if (noToolRetries >= MAX_NO_TOOL_RETRIES) {
+          const result = data.result ?? data.final;
+          onEvent({ type: "agent_done", agent: agentId, result, data });
+          return { agent: agentId, result, data, steps: step };
+        }
+        messages.push({ role: "assistant", content: raw });
+        messages.push({
+          role: "user",
+          content: `ERROR: You cannot finish without using any tools. You must at least read the relevant files or run a command. (Attempt ${noToolRetries}/${MAX_NO_TOOL_RETRIES})`
+        });
+        continue;
+      }
+
       const result = data.result ?? data.final;
       onEvent({ type: "agent_done", agent: agentId, result, data });
       return { agent: agentId, result, data, steps: step };
@@ -151,10 +183,13 @@ If you are finished, respond with:
 
     // No tool and no result
     messages.push({ role: "assistant", content: raw });
-    messages.push({ role: "user", content: "ERROR: You must either provide a 'tool' to call, or a 'result' to finish. Please provide a valid JSON." });
+    messages.push({
+      role: "user",
+      content: `ERROR: Provide either a tool call {"tool":"name","args":{...}} or a result {"result":"summary"}.`
+    });
   }
 
-  return { agent: agentId, result: "Max steps reached", truncated: true };
+  return { agent: agentId, result: "Max steps reached without completion", truncated: true };
 }
 
 module.exports = { runSubAgent };
