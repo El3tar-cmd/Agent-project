@@ -126,9 +126,9 @@
                     <p class="text-slate-400 leading-relaxed">
                         To add a new tool:
                         <ol class="list-decimal pl-6 mt-2 space-y-1">
-                            <li>Define the tool function in <code class="text-blue-300">agent_server.js</code></li>
-                            <li>Add the tool to the <code class="text-blue-300">tools</code> array with proper schema</li>
-                            <li>Update the documentation in <code class="text-blue-300">docs/tools.html</code></li>
+                             <li>Create or define the tool function under the <code class="text-blue-300">server/tools/</code> directory</li>
+                             <li>Register the tool in the <code class="text-blue-300">server/tools/index.js</code> dispatcher map</li>
+                             <li>Update the documentation in <code class="text-blue-300">docs/tools.html</code></li>
                         </ol>
                         Make sure to implement proper input validation and error handling for security.
                     </p>

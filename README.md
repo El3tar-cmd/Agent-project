@@ -8,10 +8,13 @@ Local AI coding agent powered by Ollama — available as CLI and Web UI.
 
 ```
 agent-project/
-├── agent_cli.py        ← CLI version (Python, no server needed)
-├── agent_server.js     ← Express backend (Web UI backend)
-├── src/
-│   ├── App.jsx         ← React UI (responsive, mobile-friendly)
+├── cli/                ← Standalone Python CLI
+├── server/             ← Express web server
+├── swarm/              ← Sub-Agent Swarm Orchestrator
+├── telegram/           ← Telegram Agent Bot
+├── shared/             ← Shared utility modules
+├── src/                ← React Frontend UI
+│   ├── App.jsx         ← Layout and components
 │   └── main.jsx        ← React entry point
 ├── index.html
 ├── vite.config.js
@@ -72,13 +75,13 @@ The agent is also available as a standalone CLI tool (no server required):
 ### Interactive Mode
 
 ```bash
-python agent_cli.py
+python cli/agent.py
 ```
 
 ### One-Shot Mode
 
 ```bash
-python agent_cli.py "your task here"
+python cli/agent.py "your task here"
 ```
 
 ### CLI Commands

@@ -1,0 +1,432 @@
+# ============================================================
+#  cli/agent.py  —  CLI Agent Main Loop
+# ============================================================
+
+import os
+import re
+import sys
+import json
+import shutil
+from pathlib import Path
+from datetime import datetime
+
+# Import UI elements
+from cli.ui import clr, C, info, ok, warn, err, thought, tool_ev, step_ev, result_ev, print_banner
+
+# Import tools and shared state
+from cli.tools import (
+    CWD, _bg_procs, execute_tool, list_processes, kill_process,
+    cd, screenshot, UPLOAD_DIR, resolve
+)
+
+try:
+    import requests
+except ImportError:
+    import subprocess
+    subprocess.run([sys.executable, "-m", "pip", "install", "requests", "--break-system-packages", "-q"])
+    import requests
+
+
+# ─── STATE FOR CANCELLATION ──────────────────────────────────
+class CancelledError(Exception):
+    """Exception raised when a task is cancelled via Ctrl+C or Ctrl+D."""
+    pass
+
+# ─── CONFIG ───────────────────────────────────────────────────
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/chat")
+MODEL = os.getenv("AGENT_MODEL", "qwen3-coder-next:cloud")
+MAX_STEPS = int(os.getenv("MAX_STEPS", "100"))
+CONTEXT_FILE = ".agent_state.json"
+LOG_FILE = ".agent_log.jsonl"
+MAX_CTX_CHARS = 14_000
+
+SYSTEM_PROMPT = """You are NOVA — an advanced AI coding agent (2026). You are a senior full-stack engineer with deep expertise in security, testing, performance, and documentation.
+
+## Available Tools
+read_file(path), write_file(path, content), replace_text(path, old, new),
+run_command(command), list_files(path), search_in_files(pattern, directory),
+create_dir(path), delete_file(path), http_get(url), python_eval(code),
+git_status(), git_diff(file?), grep(pattern, path), cd(path),
+search_web(query), screenshot(url_or_path), ask_human(question),
+show_image(path)
+
+## Response Format
+ALWAYS respond with ONLY a single valid JSON object. NO markdown, NO extra text.
+
+Use tool: {"thought":"<why>","tool":"<name>","args":{...}}
+Finished: {"thought":"<summary>","final":"<message>"}
+
+## CRITICAL JSON Rules
+- Output ONLY the JSON object — nothing before or after
+- Never wrap in ```json or any markdown fences
+- Escape all special characters in strings
+
+## Engineering Standards (2026)
+When building ANY feature, consider ALL layers:
+1. Backend: API, business logic, validation, error handling, auth
+2. Frontend: UI/UX, accessibility (WCAG 2.2), responsive, performance
+3. Security: Input sanitization, SQL injection, XSS, CSRF, secrets in env vars
+4. Testing: Unit tests, integration tests, edge cases, error paths
+5. Documentation: README, API docs, inline comments, examples
+6. Performance: Caching, indexes, bundle size, lazy loading
+7. DevOps: Config, health checks, logging, graceful shutdown
+
+Rules:
+- NEVER guess file contents — always read_file first
+- Use replace_text for small changes, write_file only for new files
+- After writing code, verify with run_command
+- Use search_web for documentation lookup
+- Use screenshot to verify visual output
+- Use ask_human when requirements are unclear
+- Always think full-stack — backend + frontend + tests + docs"""
+
+# ─── STATE MANAGEMENT ─────────────────────────────────────────
+def save_state(ctx, hist):
+    data = {"saved_at": datetime.now().isoformat(), "context": ctx, "history": hist}
+    Path(CONTEXT_FILE).write_text(json.dumps(data, ensure_ascii=False, indent=2))
+
+def load_state():
+    if Path(CONTEXT_FILE).exists():
+        try:
+            d = json.loads(Path(CONTEXT_FILE).read_text())
+            return d.get("context", ""), d.get("history", [])
+        except:
+            pass
+    return "", []
+
+def clear_state():
+    for f in [CONTEXT_FILE, LOG_FILE]:
+        if Path(f).exists():
+            Path(f).unlink()
+
+def append_log(e):
+    with open(LOG_FILE, "a") as f:
+        f.write(json.dumps(e, ensure_ascii=False) + "\n")
+
+# ─── ROBUST JSON PARSER ──────────────────────────────────────
+def clean_json(raw):
+    if not raw: return "{}"
+    # Strategy 1: direct parse
+    try:
+        json.loads(raw)
+        return raw
+    except:
+        pass
+    # Strategy 2: strip fences
+    s = re.sub(r'^```(?:json)?\s*', '', raw, flags=re.M)
+    s = re.sub(r'\s*```\s*$', '', s, flags=re.M).strip()
+    try:
+        json.loads(s)
+        return s
+    except:
+        pass
+    # Strategy 3: extract first { ... } with brace matching
+    depth = 0; start = -1; in_str = False; esc = False
+    for i, c in enumerate(raw):
+        if esc:
+            esc = False
+            continue
+        if c == '\\' and in_str:
+            esc = True
+            continue
+        if c == '"':
+            in_str = not in_str
+            continue
+        if in_str:
+            continue
+        if c == '{':
+            if depth == 0:
+                start = i
+            depth += 1
+        elif c == '}':
+            depth -= 1
+            if depth == 0 and start != -1:
+                candidate = raw[start:i+1]
+                try:
+                    json.loads(candidate)
+                    return candidate
+                except:
+                    pass
+    # Strategy 4: manual key extraction as fallback
+    t = re.search(r'"thought"\s*:\s*"((?:[^"\\]|\\.)*)"', raw)
+    tl = re.search(r'"tool"\s*:\s*"([^"]+)"', raw)
+    fn = re.search(r'"final"\s*:\s*"((?:[^"\\]|\\.)*)"', raw)
+    thought_v = t.group(1) if t else ""
+    if tl:
+        return json.dumps({"thought": thought_v, "tool": tl.group(1), "args": {}})
+    if fn:
+        return json.dumps({"thought": thought_v, "final": fn.group(1)})
+    return json.dumps({"__plain__": True, "text": raw})
+
+# ─── OLLAMA CALL ──────────────────────────────────────────────
+def ask_ollama(messages):
+    try:
+        r = requests.post(OLLAMA_URL, json={
+            "model": MODEL,
+            "messages": messages,
+            "stream": False,
+            "options": {"temperature": 0.2}
+        }, timeout=300)
+        r.raise_for_status()
+        return r.json()["message"]["content"]
+    except Exception as e:
+        return json.dumps({"thought": "API error", "final": f"Ollama error: {e}"})
+
+# ─── AGENT LOOP ───────────────────────────────────────────────
+def run_agent(user_request, context, chat_history, image_paths=None):
+    cwd_note = f"\n\n## Current Working Directory\n{CWD[0]}"
+    resume = f"\n\n## Resumed Session\n{context}" if context else ""
+    sys_p = SYSTEM_PROMPT + cwd_note + resume
+
+    messages = [{"role": "system", "content": sys_p}] + chat_history
+
+    user_content = user_request
+    if image_paths:
+        img_list = ", ".join(str(p) for p in image_paths)
+        user_content += f"\n\n[Attached images: {img_list}]"
+
+    messages.append({"role": "user", "content": user_content})
+
+    ctx = context
+    for n in range(1, MAX_STEPS + 1):
+        try:
+            step_ev(n)
+            raw = ask_ollama(messages)
+            cleaned = clean_json(raw)
+            try:
+                data = json.loads(cleaned)
+            except:
+                ok("Plain text response.")
+                messages.append({"role": "assistant", "content": raw})
+                ctx += f"\n\n[Step {n}] Final: {raw[:500]}"
+                save_state(ctx, messages[2:])
+                return raw, ctx, messages[2:]
+
+            if data.get("__plain__"):
+                ok("Response.")
+                print(f"\n  {data['text'][:500]}\n")
+                messages.append({"role": "assistant", "content": raw})
+                ctx += f"\n\n[Step {n}] Final: {data['text'][:300]}"
+                save_state(ctx, messages[2:])
+                return data["text"], ctx, messages[2:]
+
+            if data.get("thought"):
+                thought(data["thought"])
+
+            if "final" in data:
+                ok("Done.")
+                messages.append({"role": "assistant", "content": raw})
+                ctx += f"\n\n[Step {n}] Final: {data['final'][:300]}"
+                save_state(ctx, messages[2:])
+                append_log({"step": n, "final": data["final"]})
+                return data["final"], ctx, messages[2:]
+
+            tool_name = data.get("tool")
+            args = data.get("args", {})
+            if not tool_name:
+                messages.append({"role": "assistant", "content": raw})
+                continue
+
+            tool_ev(tool_name, args)
+            result = execute_tool(tool_name, args)
+            result_ev(result)
+            messages.append({"role": "assistant", "content": raw})
+            messages.append({"role": "user", "content": f"[Tool result: {tool_name}]\n{result}"})
+            ctx += f"\n\n[Step {n}] {tool_name}: {str(result)[:300]}"
+            if len(ctx) > MAX_CTX_CHARS:
+                ctx = f"[Original task]\n{user_request}\n\n[...trimmed...]\n\n{ctx[-4000:]}"
+            append_log({"step": n, "tool": tool_name, "args": args, "result": str(result)[:300]})
+        except (KeyboardInterrupt, EOFError):
+            warn("Task cancelled.")
+            save_state(ctx, messages[2:])
+            raise CancelledError()
+
+    warn(f"Reached {MAX_STEPS} steps. State saved. Type 'continue' to resume.")
+    save_state(ctx, messages[2:])
+    return "PAUSED", ctx, messages[2:]
+
+# ─── ATTACH IMAGE ─────────────────────────────────────────────
+def attach_image(path):
+    abs_p = Path(resolve(path))
+    if not abs_p.exists():
+        err(f"File not found: {path}")
+        return None
+    dest = UPLOAD_DIR / f"cli_{int(datetime.now().timestamp())}_{abs_p.name}"
+    shutil.copy(abs_p, dest)
+    ok(f"Attached: {dest}")
+    return dest
+
+# ─── MAIN SHELL LOOP ──────────────────────────────────────────
+def main():
+    global MODEL
+    print_banner()
+    context, chat_history = load_state()
+    if context:
+        warn(f"Resumed session. Type 'continue' to pick up.")
+    else:
+        info(f"CWD: {CWD[0]}")
+    print(clr(C.DIM, "  /help for commands\n"))
+
+    pending_images = []
+
+    # One-shot mode: python agent_cli.py "task"
+    if len(sys.argv) > 1:
+        task = " ".join(sys.argv[1:])
+        try:
+            answer, context, chat_history = run_agent(task, context, chat_history)
+        except CancelledError:
+            err("Task cancelled.")
+            return
+        if answer != "PAUSED":
+            print(f"\n{clr(C.GREEN + C.BOLD, '  NOVA:')}\n  {answer}\n")
+        return
+
+    while True:
+        try:
+            prompt = clr(C.BOLD + C.WHITE, f"[{Path(CWD[0]).name}]>>> ")
+            user = input(prompt).strip()
+        except EOFError:
+            print()
+            # Ctrl+D: cancel current task if running, otherwise exit
+            err("Task cancelled.")
+            break
+        except KeyboardInterrupt:
+            print()
+            continue
+        if not user:
+            continue
+
+        lo = user.lower()
+
+        # Exit
+        if lo in ("exit", "quit"):
+            ok("Bye!")
+            break
+
+        # Help
+        if lo == "/help":
+            print(f"""
+  {clr(C.BOLD, 'Commands:')}  Ctrl+C / Ctrl+D    Cancel current task
+  exit/quit          Exit
+  /clear             Clear session
+  /status            Session info
+  /log               Last 10 log entries
+  /model <name>      Switch model
+  /tools             List all tools
+  /ps                Show background processes
+  /kill <id>         Kill background process
+  /attach <path>     Attach image to next message
+  /screenshot <url>  Take screenshot
+  /cwd               Show current directory
+  /cd <path>         Change directory
+  continue           Resume paused session
+""")
+            continue
+
+        # Clear
+        if lo == "/clear":
+            clear_state()
+            context, chat_history = "", []
+            pending_images = []
+            ok("Cleared.")
+            continue
+
+        # Status
+        if lo == "/status":
+            info(f"Model: {MODEL}")
+            info(f"CWD: {CWD[0]}")
+            info(f"Context: {len(context)} chars")
+            info(f"History: {len(chat_history)} messages")
+            if pending_images:
+                info(f"Pending images: {len(pending_images)}")
+            continue
+
+        # Process List
+        if lo == "/ps":
+            list_processes()
+            continue
+
+        # Kill Process
+        if lo.startswith("/kill "):
+            try:
+                kill_process(int(lo.split()[1]))
+            except:
+                err("Usage: /kill <id>")
+            continue
+
+        # Switch Model
+        if lo.startswith("/model "):
+            MODEL = user[7:].strip()
+            ok(f"Model: {MODEL}")
+            continue
+
+        # List tools
+        if lo == "/tools":
+            from cli.tools import TOOL_MAP
+            print("\n  " + "\n  ".join(f"• {t}" for t in TOOL_MAP) + "\n")
+            continue
+
+        # Print current directory
+        if lo == "/cwd":
+            info(f"CWD: {CWD[0]}")
+            continue
+
+        # Change directory
+        if lo.startswith("/cd "):
+            cd(user[4:].strip())
+            continue
+
+        # Attach Image
+        if lo.startswith("/attach "):
+            img = attach_image(user[8:].strip())
+            if img:
+                pending_images.append(img)
+            continue
+
+        # Screenshot web page
+        if lo.startswith("/screenshot "):
+            target = user[12:].strip()
+            result = screenshot(target)
+            info(result)
+            if "SCREENSHOT:" in result:
+                path = result.split("SCREENSHOT:")[1].split("\n")[0].strip()
+                pending_images.append(Path(path))
+                info("Screenshot attached to next message.")
+            continue
+
+        # Print logs
+        if lo == "/log":
+            if Path(LOG_FILE).exists():
+                for line in Path(LOG_FILE).read_text().splitlines()[-10:]:
+                    try:
+                        e = json.loads(line)
+                        print(f"  Step {e.get('step', '?')} │ {e.get('tool', e.get('final', '?'))[:60]}")
+                    except:
+                        print(f"  {line[:60]}")
+            else:
+                info("No log yet.")
+            continue
+
+        # Resume task
+        if lo == "continue":
+            if not context:
+                warn("No paused session.")
+                continue
+            user = "Continue the previous task from where you left off."
+
+        # Run agent
+        imgs = pending_images.copy()
+        pending_images.clear()
+        answer, context, chat_history = run_agent(user, context, chat_history, imgs)
+
+        print()
+        if answer == "PAUSED":
+            warn("Paused. Type 'continue' to resume.")
+        else:
+            print(clr(C.BOLD + C.GREEN, "  NOVA:"))
+            for line in answer.splitlines():
+                print(f"  {line}")
+        print()
+
+if __name__ == "__main__":
+    main()
