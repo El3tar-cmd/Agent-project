@@ -35,7 +35,7 @@ class CancelledError(Exception):
 # ─── CONFIG ───────────────────────────────────────────────────
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/chat")
 MODEL = os.getenv("AGENT_MODEL", "qwen3-coder-next:cloud")
-MAX_STEPS = int(os.getenv("MAX_STEPS", "100"))
+MAX_STEPS = int(os.getenv("MAX_STEPS", "30"))
 CONTEXT_FILE = ".agent_state.json"
 LOG_FILE = ".agent_log.jsonl"
 MAX_CTX_CHARS = 14_000
@@ -199,16 +199,16 @@ def run_agent(user_request, context, chat_history, image_paths=None):
                 ok("Plain text response.")
                 messages.append({"role": "assistant", "content": raw})
                 ctx += f"\n\n[Step {n}] Final: {raw[:500]}"
-                save_state(ctx, messages[2:])
-                return raw, ctx, messages[2:]
+                save_state(ctx, messages[1:])
+                return raw, ctx, messages[1:]
 
             if data.get("__plain__"):
                 ok("Response.")
                 print(f"\n  {data['text'][:500]}\n")
                 messages.append({"role": "assistant", "content": raw})
                 ctx += f"\n\n[Step {n}] Final: {data['text'][:300]}"
-                save_state(ctx, messages[2:])
-                return data["text"], ctx, messages[2:]
+                save_state(ctx, messages[1:])
+                return data["text"], ctx, messages[1:]
 
             if data.get("thought"):
                 thought(data["thought"])
@@ -217,9 +217,9 @@ def run_agent(user_request, context, chat_history, image_paths=None):
                 ok("Done.")
                 messages.append({"role": "assistant", "content": raw})
                 ctx += f"\n\n[Step {n}] Final: {data['final'][:300]}"
-                save_state(ctx, messages[2:])
+                save_state(ctx, messages[1:])
                 append_log({"step": n, "final": data["final"]})
-                return data["final"], ctx, messages[2:]
+                return data["final"], ctx, messages[1:]
 
             tool_name = data.get("tool")
             args = data.get("args", {})
@@ -238,12 +238,12 @@ def run_agent(user_request, context, chat_history, image_paths=None):
             append_log({"step": n, "tool": tool_name, "args": args, "result": str(result)[:300]})
         except (KeyboardInterrupt, EOFError):
             warn("Task cancelled.")
-            save_state(ctx, messages[2:])
+            save_state(ctx, messages[1:])
             raise CancelledError()
 
     warn(f"Reached {MAX_STEPS} steps. State saved. Type 'continue' to resume.")
-    save_state(ctx, messages[2:])
-    return "PAUSED", ctx, messages[2:]
+    save_state(ctx, messages[1:])
+    return "PAUSED", ctx, messages[1:]
 
 # ─── ATTACH IMAGE ─────────────────────────────────────────────
 def attach_image(path):

@@ -32,7 +32,9 @@ function loadState() {
  * Append entry to log file.
  */
 function appendLog(entry) {
-  fs.appendFileSync(LOG_FILE, JSON.stringify(entry) + "\n");
+  try {
+    fs.appendFileSync(LOG_FILE, JSON.stringify(entry) + "\n");
+  } catch {}
 }
 
 router.get("/state", (req, res) => {

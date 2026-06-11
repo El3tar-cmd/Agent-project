@@ -14,7 +14,7 @@ export function useAgent(fetchTree, refreshFiles, isMobile, setDesktopPanel) {
   const [activeTool, setActive] = useState(null);
   const [confirm, setConfirm] = useState(null);
   const [stepCount, setStepCount] = useState(0);
-  
+
   const [askHuman, setAskHuman] = useState(null);
   const [planSteps, setPlanSteps] = useState([]);
   const [streamLines, setStreamLines] = useState([]);
@@ -22,6 +22,14 @@ export function useAgent(fetchTree, refreshFiles, isMobile, setDesktopPanel) {
   const [logs, setLogs] = useState([]);
 
   const abortRef = useRef(null);
+  const bottomRef = useRef(null);
+  // Use a ref to track stepCount inside async callbacks without stale closure
+  const stepCountRef = useRef(0);
+
+  // Auto-scroll to bottom whenever msgs change
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [msgs]);
 
   // Fetch available models on mount
   useEffect(() => {
@@ -51,6 +59,7 @@ export function useAgent(fetchTree, refreshFiles, isMobile, setDesktopPanel) {
   const handleEv = useCallback((ev) => {
     switch (ev.type) {
       case "step":
+        stepCountRef.current += 1;
         setStepCount(n => n + 1);
         addEv("step", { message: ev.message });
         break;
@@ -128,11 +137,12 @@ export function useAgent(fetchTree, refreshFiles, isMobile, setDesktopPanel) {
     setRunning(true);
     setStatus("running");
     setStepCount(0);
-    
+    stepCountRef.current = 0;
+
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     const t0 = Date.now();
-    
+
     try {
       const res = await fetch("/api/run", {
         method: "POST",
@@ -144,7 +154,7 @@ export function useAgent(fetchTree, refreshFiles, isMobile, setDesktopPanel) {
       const dec = new TextDecoder();
       let buf = "";
       let finalMsg = "";
-      
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -161,9 +171,15 @@ export function useAgent(fetchTree, refreshFiles, isMobile, setDesktopPanel) {
           } catch {}
         }
       }
-      
+
       if (finalMsg) {
-        const entry = { question: text, answer: finalMsg, steps: stepCount, duration: Math.round((Date.now() - t0) / 1000) };
+        // Use stepCountRef.current to get the live step count, not the stale closure value
+        const entry = {
+          question: text,
+          answer: finalMsg,
+          steps: stepCountRef.current,
+          duration: Math.round((Date.now() - t0) / 1000)
+        };
         await fetch("/api/history", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -180,7 +196,7 @@ export function useAgent(fetchTree, refreshFiles, isMobile, setDesktopPanel) {
     abortRef.current = null;
     await refreshFiles();
     await fetchTree();
-  }, [running, model, stepCount, handleEv, addMsg, addEv, refreshFiles, fetchTree]);
+  }, [running, model, handleEv, addMsg, addEv, refreshFiles, fetchTree]);
 
   const handleConfirm = useCallback(async (confirmed) => {
     const c = confirm;
@@ -200,6 +216,7 @@ export function useAgent(fetchTree, refreshFiles, isMobile, setDesktopPanel) {
     setMsgs([]);
     setStatus("idle");
     setStepCount(0);
+    stepCountRef.current = 0;
     addSys("Session cleared.");
   }, [addSys]);
 
@@ -287,6 +304,7 @@ export function useAgent(fetchTree, refreshFiles, isMobile, setDesktopPanel) {
     logs,
     setLogs,
     abortRef,
+    bottomRef,
     send,
     sendWithImages,
     handleConfirm,

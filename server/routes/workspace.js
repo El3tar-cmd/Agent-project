@@ -103,6 +103,18 @@ router.delete("/memory", (req, res) => {
 // History
 router.get("/history", (req, res) => res.json(loadHistory()));
 
+router.post("/history", (req, res) => {
+  try {
+    if (!req.body || Object.keys(req.body).length === 0) {
+      return res.status(400).json({ error: "No data" });
+    }
+    appendHistory(req.body);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.delete("/history", (req, res) => {
   try {
     if (fs.existsSync(HISTORY_FILE)) {

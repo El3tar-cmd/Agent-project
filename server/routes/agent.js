@@ -11,7 +11,7 @@ const { SYSTEM_PROMPT, PERSONAS } = require("../lib/prompts");
 const { TOOLS, runCommandStreaming } = require("../tools");
 const { loadState, saveState, appendLog } = require("./state");
 const { loadMemory } = require("./workspace");
-const { MAX_STEPS, MAX_CTX_CHARS } = require("../../shared/constants");
+const { MAX_STEPS, MAX_CTX_CHARS, MAX_HISTORY_MESSAGES } = require("../../shared/constants");
 
 const router = express.Router();
 
@@ -56,15 +56,15 @@ async function summarizeContext(ctx, model) {
     const raw = await askOllama([
       {
         role: "system",
-        content: "You are a context summarizer. Compress the agent conversation history into a concise summary preserving all important facts, decisions, file paths, and code changes. Be brief."
+        content: "You are a context summarizer. Compress the agent conversation history into a concise plain-text summary preserving all important facts, decisions, file paths, and code changes. Return only the summary text — no JSON, no markdown."
       },
       {
         role: "user",
         content: `Summarize this agent session context:\n\n${ctx.slice(0, 20000)}`
       }
     ], model, 60000);
-    const parsed = JSON.parse(cleanJson(raw));
-    const summary = parsed.final || parsed.summary || raw;
+    // Use raw text directly — no JSON parsing needed
+    const summary = raw.trim() || ctx.slice(-4000);
     return `[SUMMARIZED CONTEXT]\n${summary}`;
   } catch {
     return ctx.slice(-4000);
@@ -74,6 +74,14 @@ async function summarizeContext(ctx, model) {
 function trimContext(ctx, req) {
   if (ctx.length <= MAX_CTX_CHARS) return ctx;
   return `[Original task]\n${req}\n\n[...older steps trimmed...]\n\n${ctx.slice(-4000)}`;
+}
+
+/** Trim message history to prevent token explosion — keep system + last N messages */
+function trimMessages(messages) {
+  if (messages.length <= MAX_HISTORY_MESSAGES + 1) return messages;
+  const system = messages[0];
+  const rest = messages.slice(1);
+  return [system, ...rest.slice(-MAX_HISTORY_MESSAGES)];
 }
 
 // ── ENDPOINTS ─────────────────────────────────────────────
@@ -107,10 +115,14 @@ router.post("/run", async (req, res) => {
   res.setHeader("Connection", "keep-alive");
   res.flushHeaders();
 
+  let aborted = false;
+  req.on("close", () => { aborted = true; });
+
   const send = (type, data) => {
+    if (aborted) return;
     try {
       res.write(`data: ${JSON.stringify({ type, ...data })}\n\n`);
-    } catch {}
+    } catch { aborted = true; }
   };
 
   const { context, history } = loadState();
@@ -151,9 +163,12 @@ router.post("/run", async (req, res) => {
   const memoryNote = memNote ? `\n\n## Memory Context${memNote}` : "";
   const resume = ctx ? `\n\n## Resumed Session Context\n${ctx}` : "";
 
+  // Cap loaded history to prevent token explosion from previous sessions
+  const cappedHistory = history.slice(-MAX_HISTORY_MESSAGES);
+
   const messages = [
     { role: "system", content: SYSTEM_PROMPT + personaNote + cwdNote + memoryNote + resume },
-    ...history,
+    ...cappedHistory,
     { role: "user", content: userMsg }
   ];
 
@@ -164,6 +179,7 @@ router.post("/run", async (req, res) => {
 
   try {
     for (let n = 1; n <= MAX_STEPS; n++) {
+      if (aborted) break;
       send("step", { step: n, message: `Step ${n} — Thinking…` });
 
       let raw;
@@ -182,7 +198,7 @@ router.post("/run", async (req, res) => {
           send("final", { message: data.text });
           messages.push({ role: "assistant", content: raw });
           ctx += `\n\n[Step ${n}] Final(plain): ${data.text}`;
-          saveState(ctx, messages.slice(1));
+          saveState(ctx, trimMessages(messages).slice(1));
           finalAnswer = data.text;
           break;
         }
@@ -190,7 +206,7 @@ router.post("/run", async (req, res) => {
         send("final", { message: raw });
         messages.push({ role: "assistant", content: raw });
         ctx += `\n\n[Step ${n}] Final(raw): ${raw.slice(0, 500)}`;
-        saveState(ctx, messages.slice(1));
+        saveState(ctx, trimMessages(messages).slice(1));
         finalAnswer = raw;
         break;
       }
@@ -203,7 +219,7 @@ router.post("/run", async (req, res) => {
         send("final", { message: data.final });
         messages.push({ role: "assistant", content: raw });
         ctx += `\n\n[Step ${n}] Final: ${data.final}`;
-        saveState(ctx, messages.slice(1));
+        saveState(ctx, trimMessages(messages).slice(1));
         appendLog({ step: n, type: "final", message: data.final });
         finalAnswer = data.final;
         break;
@@ -213,6 +229,10 @@ router.post("/run", async (req, res) => {
       const args = data.args || {};
       if (!toolName) {
         messages.push({ role: "assistant", content: raw });
+        // Trim messages in place to prevent explosion
+        const trimmed = trimMessages(messages);
+        messages.length = 0;
+        messages.push(...trimmed);
         continue;
       }
 
@@ -296,6 +316,11 @@ router.post("/run", async (req, res) => {
       messages.push({ role: "user", content: `[Tool result: ${toolName}]\n${result}` });
       ctx += `\n\n[Step ${n}] Tool:${toolName} Result:${result.slice(0, 500)}`;
       ctx = trimContext(ctx, userMsg);
+
+      // Trim messages array to prevent context explosion
+      const trimmed = trimMessages(messages);
+      messages.length = 0;
+      messages.push(...trimmed);
     }
   } catch (e) {
     send("error", { message: e.message });
@@ -303,7 +328,7 @@ router.post("/run", async (req, res) => {
 
   if (!finalAnswer) {
     send("paused", { message: `Reached ${MAX_STEPS} steps. Type 'continue' to resume.` });
-    saveState(ctx, messages.slice(1));
+    saveState(ctx, trimMessages(messages).slice(1));
   }
 
   res.end();

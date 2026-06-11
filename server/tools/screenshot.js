@@ -22,8 +22,6 @@ async function toolScreenshot(urlOrFile, options = {}) {
     const abs = resolvePath(targetUrl);
     if (!fs.existsSync(abs)) return `ERROR: file not found: ${abs}`;
     targetUrl = `file://${abs}`;
-  } else if (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://") && !targetUrl.startsWith("file://")) {
-    targetUrl = "https://" + targetUrl;
   }
 
   const outFile = path.join(SCREENSHOT_DIR, `shot_${Date.now()}.png`);

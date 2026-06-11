@@ -797,6 +797,7 @@ bot.onText(/\/stop/, async msg => {
   if (!isAllowed(msg)) return;
   const session = getSession(msg.chat.id);
   if (session.running) {
+    // Destroy the SSE connection — triggers req.on('close') on server side to abort loop
     try { session.abortReq?.destroy(); } catch {}
     session.running = false;
     bot.sendMessage(msg.chat.id, "⏹ Agent stopped.");
@@ -808,8 +809,17 @@ bot.onText(/\/stop/, async msg => {
 bot.onText(/\/clear/, async msg => {
   if (!isAllowed(msg)) return;
   try {
-    await apiPost("/api/state", {});
-    await fetch(SERVER_URL + "/api/state", { method:"DELETE" }).catch(()=>{});
+    // DELETE /api/state clears saved context and history
+    await new Promise((resolve, reject) => {
+      const url = new URL(SERVER_URL + "/api/state");
+      const lib = url.protocol === "https:" ? require("https") : require("http");
+      const req = lib.request(url.href, { method: "DELETE" }, res => {
+        res.resume();
+        res.on("end", resolve);
+      });
+      req.on("error", reject);
+      req.end();
+    });
     sessions.delete(msg.chat.id);
     bot.sendMessage(msg.chat.id, "✅ Session cleared.");
   } catch(e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }

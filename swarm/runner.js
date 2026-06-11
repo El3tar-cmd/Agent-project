@@ -66,6 +66,8 @@ async function runSubAgent({ agentId, task, context, model, onEvent, maxSteps = 
   onEvent({ type: "agent_start", agent: agentId, task });
 
   let toolsUsed = 0;
+  let noToolRetries = 0;
+  const MAX_NO_TOOL_RETRIES = 3;
 
   for (let step = 1; step <= maxSteps; step++) {
     onEvent({ type: "agent_step", agent: agentId, step, message: `${agentDef.emoji} ${agentDef.name} — step ${step}` });
@@ -131,8 +133,15 @@ If you are finished, respond with:
     // Finished?
     if (data.result !== undefined || data.final !== undefined) {
       if (toolsUsed === 0) {
+        noToolRetries++;
+        if (noToolRetries >= MAX_NO_TOOL_RETRIES) {
+          // Accept the result after max retries to prevent infinite loop
+          const result = data.result ?? data.final;
+          onEvent({ type: "agent_done", agent: agentId, result, data });
+          return { agent: agentId, result, data, steps: step };
+        }
         messages.push({ role: "assistant", content: raw });
-        messages.push({ role: "user", content: "ERROR: You cannot finish without using any tools! You MUST use at least one tool (like 'list_files', 'read_file', 'write_file', or 'run_command') to perform actual work or gather information before returning a result." });
+        messages.push({ role: "user", content: `ERROR: You cannot finish without using any tools! You MUST use at least one tool (like 'list_files', 'read_file', 'write_file', or 'run_command') to perform actual work or gather information before returning a result. (Attempt ${noToolRetries}/${MAX_NO_TOOL_RETRIES})` });
         continue;
       }
       const result = data.result ?? data.final;

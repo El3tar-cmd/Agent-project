@@ -193,10 +193,10 @@ async function runOrchestrator({ task, model, onEvent, maxRounds = SWARM_MAX_ROU
   let finalMsg = "All agents completed their tasks.";
   try {
     const synthRaw = await askOllama(synthMessages, model, 60000);
-    const parsed = JSON.parse(cleanJson(synthRaw));
-    finalMsg = parsed.final || parsed.result || synthRaw;
+    // Synthesis prompt asks for plain text — use it directly without JSON parsing
+    finalMsg = synthRaw.trim() || `Completed ${Object.keys(results).length} subtasks.`;
   } catch {
-    // build simple summary from results
+    // build simple summary from results if synthesis fails
     finalMsg = `Completed ${Object.keys(results).length} subtasks:\n\n` +
       Object.entries(results).map(([id, r]) => {
         const t = subtasks.find(s => s.id === id);

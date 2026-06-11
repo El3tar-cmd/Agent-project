@@ -18,11 +18,14 @@ const DEFAULT_MODEL = process.env.AGENT_MODEL || "qwen3-coder-next:cloud";
 /** Ollama API base URL */
 const OLLAMA_URL = "http://localhost:11434";
 
-/** Maximum agent steps before pausing */
-const MAX_STEPS = 100;
+/** Maximum agent steps before pausing (lowered to prevent token waste & loops) */
+const MAX_STEPS = 30;
 
 /** Maximum context characters before summarization */
 const MAX_CTX_CHARS = 12000;
+
+/** Maximum messages kept in conversation history to prevent token explosion */
+const MAX_HISTORY_MESSAGES = 30;
 
 /** Agent state file */
 const STATE_FILE = ".agent_state.json";
@@ -40,8 +43,8 @@ const HISTORY_FILE = ".agent_history.json";
 const WORKSPACES_FILE = ".agent_workspaces.json";
 
 /** Swarm constants */
-const SWARM_MAX_STEPS    = 100;
-const SWARM_STEP_TIMEOUT = 300000; // 5 min
+const SWARM_MAX_STEPS    = 15;   // lowered from 100 — prevents per-agent token explosion
+const SWARM_STEP_TIMEOUT = 120000; // 2 min per step
 const SWARM_MAX_ROUNDS   = 5;
 
 /** Available agent personas */
@@ -61,6 +64,7 @@ module.exports = {
   OLLAMA_URL,
   MAX_STEPS,
   MAX_CTX_CHARS,
+  MAX_HISTORY_MESSAGES,
   STATE_FILE,
   LOG_FILE,
   MEMORY_FILE,

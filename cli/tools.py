@@ -264,11 +264,12 @@ const p=require('puppeteer');p.launch({{headless:'new',args:['--no-sandbox','--d
         except:
             pass
     
-    # Try Remote Service Fallback (for Termux environment)
+    # Try Remote Service Fallback (screenshot-service alongside this file)
     try:
+        service_dir = Path(__file__).resolve().parent.parent / "tools" / "screenshot-service"
         remote_script = f"""
 import sys
-sys.path.insert(0, '/data/data/com.termux/files/home/agent-project/agent-project/tools/screenshot-service')
+sys.path.insert(0, {repr(str(service_dir))})
 from screenshot import take_screenshot
 success = take_screenshot('{target}', '{out}')
 sys.exit(0 if success else 1)
@@ -276,7 +277,7 @@ sys.exit(0 if success else 1)
         res = subprocess.run([sys.executable, "-c", remote_script], capture_output=True, timeout=30)
         if out.exists() and out.stat().st_size > 0:
             return f"SCREENSHOT:{out}\nURL:{target}"
-    except Exception as e:
+    except Exception:
         pass
         
     return f"ERROR: Screenshot failed. Install puppeteer: npm install puppeteer\nTarget was: {target}"
