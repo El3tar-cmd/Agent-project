@@ -93,7 +93,7 @@ async function runSubAgent({ agentId, task, context, model, onEvent, maxSteps = 
     try {
       const cleaned = cleanJson(raw);
       data = JSON.parse(cleaned);
-      if (data.__plain__ || (!data.tool && data.result === undefined && data.final === undefined)) {
+      if (data.__plain__ || (!data.tool && data.result == null && data.final == null)) {
         throw new Error("Plain text or incomplete JSON response");
       }
     } catch {
@@ -112,6 +112,14 @@ async function runSubAgent({ agentId, task, context, model, onEvent, maxSteps = 
 
     const toolName = data.tool;
     const args = data.args || {};
+
+    // Handle "none" tool — model thinks no tool is needed but used tool:"none" instead of result
+    const NONE_TOOLS = new Set(["none","null","n/a","no_tool","no tool","finish","done","respond"]);
+    if (toolName && NONE_TOOLS.has(String(toolName).toLowerCase().trim())) {
+      messages.push({ role: "assistant", content: raw });
+      messages.push({ role: "user", content: 'Do NOT use tool:"none". Instead finish with: {"thought":"brief","result":"your findings","files_changed":[]}' });
+      continue;
+    }
 
     if (toolName && typeof toolName === "string" && toolName.trim() !== "") {
       // Warn about repeated list_files on same directory
@@ -142,13 +150,13 @@ async function runSubAgent({ agentId, task, context, model, onEvent, maxSteps = 
     }
 
     // Finished?
-    if (data.result !== undefined || data.final !== undefined) {
+    if (data.result != null || data.final != null) {
+      const result = (data.result ?? data.final ?? "").toString() || "(no summary)";
+
       // If this agent is required to write files but hasn't — push back
       if (requiresWrite && writeToolsUsed === 0) {
         noToolRetries++;
         if (noToolRetries >= MAX_NO_TOOL_RETRIES) {
-          // Accept after max retries to prevent infinite loop
-          const result = data.result ?? data.final;
           onEvent({ type: "agent_done", agent: agentId, result, data });
           return { agent: agentId, result, data, steps: step };
         }
@@ -164,7 +172,6 @@ async function runSubAgent({ agentId, task, context, model, onEvent, maxSteps = 
       if (toolsUsed === 0) {
         noToolRetries++;
         if (noToolRetries >= MAX_NO_TOOL_RETRIES) {
-          const result = data.result ?? data.final;
           onEvent({ type: "agent_done", agent: agentId, result, data });
           return { agent: agentId, result, data, steps: step };
         }
@@ -176,7 +183,6 @@ async function runSubAgent({ agentId, task, context, model, onEvent, maxSteps = 
         continue;
       }
 
-      const result = data.result ?? data.final;
       onEvent({ type: "agent_done", agent: agentId, result, data });
       return { agent: agentId, result, data, steps: step };
     }

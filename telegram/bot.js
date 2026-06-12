@@ -4,6 +4,9 @@
 //  Connects to agent_server.js (port 3131)
 // ============================================================
 
+// Load .env for local development (Replit uses its own Secrets panel)
+try { require("dotenv").config(); } catch {}
+
 const TelegramBot = require("node-telegram-bot-api");
 const http        = require("http");
 const https       = require("https");
@@ -569,7 +572,12 @@ async function runSwarm(chatId, task, model) {
             { chat_id:chatId, message_id:statusId, parse_mode:"HTML" }
           );
         } catch {}
-        if (finalMsg) await sendFinalMessage(chatId, finalMsg, 0, []);
+        if (finalMsg) {
+          // Count total steps and tool calls across all agents
+          const totalSteps = Object.values(agentStatus).reduce((s, a) => s + (a.steps || 0), 0);
+          const totalTools = Object.values(agentStatus).reduce((s, a) => s + (a.toolCalls || 0), 0);
+          await sendFinalMessage(chatId, finalMsg, totalSteps, Array(totalTools).fill({}));
+        }
         resolve();
       });
 
@@ -610,7 +618,8 @@ async function runSwarm(chatId, task, model) {
         case "batch_start":
           if (ev.batch?.length) {
             const agents = ev.batch.map(t=>t.agent).join(", ");
-            try { await bot.sendMessage(chatId, `⚡ <b>Running in parallel:</b> ${escHtml(agents)}`, { parse_mode:"HTML" }); } catch {}
+            const label = ev.batch.length > 1 ? "⚡ <b>Running in parallel:</b>" : "▶️ <b>Running:</b>";
+            try { await bot.sendMessage(chatId, `${label} ${escHtml(agents)}`, { parse_mode:"HTML" }); } catch {}
           }
           break;
         case "agent_start":
@@ -626,7 +635,10 @@ async function runSwarm(chatId, task, model) {
           await updateSwarm();
           break;
         case "agent_tool":
-          if (agentStatus[ev.agent]) agentStatus[ev.agent].tool = `${ev.tool}(${JSON.stringify(ev.args||{}).slice(0,40)})`;
+          if (agentStatus[ev.agent]) {
+            agentStatus[ev.agent].tool = `${ev.tool}(${JSON.stringify(ev.args||{}).slice(0,40)})`;
+            agentStatus[ev.agent].toolCalls = (agentStatus[ev.agent].toolCalls || 0) + 1;
+          }
           await updateSwarm();
           break;
         case "agent_done":

@@ -182,7 +182,10 @@ async function runOrchestrator({ task, model, onEvent, maxRounds = SWARM_MAX_ROU
 
   const synthesis = Object.entries(results).map(([id, r]) => {
     const t = subtasks.find(s => s.id === id);
-    return `## ${SUB_AGENTS[r.agent]?.emoji || "•"} ${SUB_AGENTS[r.agent]?.name || r.agent} (${id})\nTask: ${t?.task || "?"}\nResult: ${typeof r.result === "string" ? r.result : JSON.stringify(r.result, null, 2)}`;
+    const resultText = r.result != null
+      ? (typeof r.result === "string" ? r.result : JSON.stringify(r.result, null, 2))
+      : (r.error ? `ERROR: ${r.error}` : "(no output)");
+    return `## ${SUB_AGENTS[r.agent]?.emoji || "•"} ${SUB_AGENTS[r.agent]?.name || r.agent} (${id})\nTask: ${t?.task || "?"}\nResult: ${resultText}`;
   }).join("\n\n---\n\n");
 
   const synthMessages = [

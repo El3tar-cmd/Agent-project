@@ -242,6 +242,15 @@ def run_agent(user_request, context, chat_history, image_paths=None):
                 messages.append({"role": "assistant", "content": raw})
                 continue
 
+            # Handle "none" tool — model thinks no tool is needed but didn't use {"final":"..."}
+            NONE_TOOL_NAMES = {"none", "null", "n/a", "no_tool", "no tool", "finish", "done", "respond"}
+            if str(tool_name).lower().strip() in NONE_TOOL_NAMES:
+                messages.append({"role": "assistant", "content": raw})
+                messages.append({"role": "user", "content":
+                    'You do not need a tool for this. Respond with ONLY: {"thought":"<brief>","final":"<your answer>"}'
+                })
+                continue
+
             # think tool: show thought but don't print result to user
             if tool_name == "think":
                 t_val = args.get("thought", args.get("reasoning", ""))
