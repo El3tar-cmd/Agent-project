@@ -2,6 +2,6 @@
 //  swarm/tools.js  —  Swarm Tools (Re-uses Server Tools)
 // ============================================================
 
-const { TOOLS } = require("../server/tools");
+const { TOOLS, WRITE_TOOLS, WRITE_REQUIRED_AGENTS } = require("../server/tools");
 
-module.exports = { TOOLS };
+module.exports = { TOOLS, WRITE_TOOLS, WRITE_REQUIRED_AGENTS };

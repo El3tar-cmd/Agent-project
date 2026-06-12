@@ -79,6 +79,15 @@ export function useAgent(fetchTree, refreshFiles, isMobile, setDesktopPanel) {
       case "thought":
         addEv("thought", { message: ev.message });
         break;
+      case "thinking_step":
+        addEv("thinking_step", {
+          tool: ev.tool,
+          thought: ev.args ? (ev.args.thought || ev.args.reasoning || "") : "",
+          thoughtNumber: ev.args ? (ev.args.thoughtNumber || ev.args.thought_number || 1) : 1,
+          totalThoughts: ev.args ? (ev.args.totalThoughts || ev.args.total_thoughts || 1) : 1,
+          result: ev.result
+        });
+        break;
       case "tool_call":
         setActive(ev.tool);
         addEv("tool", { message: `${ev.tool}(${JSON.stringify(ev.args)})` });

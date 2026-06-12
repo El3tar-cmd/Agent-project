@@ -79,6 +79,7 @@ SYSTEM_PROMPT = """You are NOVA — an advanced AI coding agent (2026). Senior f
 - cd(path) — change directory
 - ask_human(question) — ask user for clarification
 - think(thought) — plan complex tasks before acting
+- sequential_thinking(thought, thoughtNumber, totalThoughts, nextThoughtNeeded) — Break down complex problems step-by-step
 
 ## Response Format
 ALWAYS respond with ONLY a single valid JSON object. NO markdown, NO extra text.
@@ -94,7 +95,7 @@ Finished: {"thought":"<summary>","final":"<message to user>"}
 ## Efficiency Rules — MUST FOLLOW
 1. NEVER call list_files on the same directory more than once
 2. Use read_lines for large files — NOT read_file repeatedly
-3. Use think to plan complex multi-step tasks before starting
+3. Use think or sequential_thinking to plan complex multi-step tasks before starting
 4. Don't re-read files you've already read
 5. Once work is verified, return {"final":"..."} immediately — do NOT loop
 
@@ -248,7 +249,11 @@ def run_agent(user_request, context, chat_history, image_paths=None):
             tool_name = data.get("tool")
             args = data.get("args", {})
             if not tool_name:
+                # Model didn't specify a tool - ask it to provide final answer or use a tool
                 messages.append({"role": "assistant", "content": raw})
+                messages.append({"role": "user", "content":
+                    'You did not specify a tool. Either provide a final answer with {"thought":"...","final":"..."} or use a tool. Do not repeat the same response.'
+                })
                 continue
 
             # Handle "none" tool — model thinks no tool is needed but didn't use {"final":"..."}
@@ -260,13 +265,23 @@ def run_agent(user_request, context, chat_history, image_paths=None):
                 })
                 continue
 
-            # think tool: show thought but don't print result to user
-            if tool_name == "think":
+            # think & sequential_thinking tools: show thought but don't print result to user
+            if tool_name in ("think", "sequential_thinking"):
                 t_val = args.get("thought", args.get("reasoning", ""))
-                thought(f"[Planning] {t_val}")
+                if tool_name == "think":
+                    thought(f"[Planning] {t_val}")
+                    result = "Thought recorded. Proceed with your plan."
+                else:
+                    t_num = args.get("thoughtNumber", args.get("thought_number", 1))
+                    tot = args.get("totalThoughts", args.get("total_thoughts", 1))
+                    next_needed = args.get("nextThoughtNeeded", args.get("next_thought_needed", True))
+                    if isinstance(next_needed, str):
+                        next_needed = next_needed.lower() != 'false'
+                    thought(f"[Thinking {t_num}/{tot}] {t_val}")
+                    result = f"Thought #{t_num}/{tot} processed. {'Next thought step needed.' if next_needed else 'Ready to proceed with action.'}"
                 messages.append({"role": "assistant", "content": raw})
-                messages.append({"role": "user", "content": f"[Tool result: think]\nThought recorded. Proceed with your plan."})
-                ctx += f"\n\n[Step {n}] think: {t_val[:200]}"
+                messages.append({"role": "user", "content": f"[Tool result: {tool_name}]\n{result}"})
+                ctx += f"\n\n[Step {n}] {tool_name}: {t_val[:200]}"
                 continue
 
             tool_ev(tool_name, args)

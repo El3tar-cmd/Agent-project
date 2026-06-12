@@ -31,6 +31,24 @@ function toolThink(thought) {
   return `Thought recorded. Proceed with your plan.`;
 }
 
+/** sequential_thinking — lets the agent do step-by-step sequential thinking */
+function toolSequentialThinking(args) {
+  const thoughtNumber = args.thoughtNumber || args.thought_number || 1;
+  const totalThoughts = args.totalThoughts || args.total_thoughts || 1;
+  
+  let nextThoughtNeeded = true;
+  const nextVal = args.nextThoughtNeeded !== undefined ? args.nextThoughtNeeded : args.next_thought_needed;
+  if (nextVal !== undefined) {
+    if (typeof nextVal === "string") {
+      nextThoughtNeeded = nextVal.toLowerCase() !== "false";
+    } else {
+      nextThoughtNeeded = !!nextVal;
+    }
+  }
+
+  return `Thought #${thoughtNumber}/${totalThoughts} processed. ${nextThoughtNeeded ? "Next thought step needed." : "Ready to proceed with action."}`;
+}
+
 const TOOLS = {
   // Filesystem
   read_file:       fsTools.readFile,
@@ -72,7 +90,8 @@ const TOOLS = {
   cd:              a => toolCd(a.path || a.dir || a.directory || ""),
 
   // Reasoning (no external side effects)
-  think:           a => toolThink(a.thought || a.reasoning || a.plan || ""),
+  think:               a => toolThink(a.thought || a.reasoning || a.plan || ""),
+  sequential_thinking: a => toolSequentialThinking(a),
 };
 
 /** Tools that produce output files — used by swarm to enforce write completion */

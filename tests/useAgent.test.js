@@ -13,11 +13,15 @@ describe('useAgent Hook', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // Default mock for /api/models
+    // Default mock for /api/health
     fetch.mockImplementation((url) => {
-      if (url === '/api/models') {
+      if (url === '/api/health') {
         return Promise.resolve({
-          json: () => Promise.resolve(['gpt-4', 'claude-3']),
+          json: () => Promise.resolve({
+            ollama: true,
+            ollama_url: 'http://localhost:11434',
+            models: ['gpt-4', 'claude-3']
+          }),
         });
       }
       return Promise.resolve({ json: () => Promise.resolve({}) });
@@ -46,7 +50,7 @@ describe('useAgent Hook', () => {
     // However, it's used inside send. Let's test the state changes by simulating a send stream.
     
     const mockStream = new ReadableStream({
-      start(controller) => {
+      start(controller) {
         controller.enqueue(new TextEncoder().encode('data:{"type":"step","message":"Step 1"}\n\n'));
         controller.enqueue(new TextEncoder().encode('data:{"type":"thought","message":"Thinking..."}\n\n'));
         controller.enqueue(new TextEncoder().encode('data:{"type":"tool_call","tool":"read_file","args":{"path":"test.txt"}}\n\n'));
@@ -78,7 +82,7 @@ describe('useAgent Hook', () => {
     const { result } = renderHook(() => useAgent(mockFetchTree, mockRefreshFiles, isMobile, mockSetDesktopPanel));
 
     const mockStream = new ReadableStream({
-      start(controller) => {
+      start(controller) {
         controller.enqueue(new TextEncoder().encode('data:{"type":"confirm_request","runId":"123","tool":"delete","preview":"rm -rf /"}\n\n'));
         controller.close();
       }

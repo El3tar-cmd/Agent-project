@@ -39,7 +39,7 @@ router.get("/processes/stream", (req, res) => {
   res.write(`data: ${JSON.stringify({ type: "snapshot", processes: pmSnapshot() })}\n\n`);
   
   pmListeners.add(res);
-  req.on("close", () => {
+  res.on("close", () => {
     pmListeners.delete(res);
   });
 });

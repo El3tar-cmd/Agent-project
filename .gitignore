@@ -52,3 +52,12 @@ error.txt
 # Documentation (optional - uncomment if you don't want docs in repo)
 # docs/
 .chromium-profile/
+
+# Local agent run history, states and cache
+.agent_state.json
+.agent_history.json
+.agent_memory.json
+.agent_workspaces.json
+.local/
+*.png
+

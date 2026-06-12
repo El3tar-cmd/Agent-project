@@ -48,19 +48,34 @@ const TOOL_DOCS = `
 ### Navigation
 - cd: {"path": "directory path"} — change current working directory
 
-### Reasoning
+### Reasoning & Deep Thinking
 - think: {"thought": "your reasoning"} — internal planning step (no external side effects)
+- sequential_thinking: {"thought": "step analysis", "thoughtNumber": 1, "totalThoughts": 3, "nextThoughtNeeded": true} — structured multi-step reasoning. Use for complex analysis before acting.
 
 ## CRITICAL RULES FOR MULTI-AGENT SWARM
 1. **TOOL CALLS ARE REQUIRED**: You MUST use write_file, append_file, or replace_text to actually save files.
    Simply including file contents in your "result" field does NOT save anything to disk.
 2. **JSON Format**: Respond ONLY with a single valid JSON object. No markdown, no code fences.
-   Escape all newlines as \\n inside JSON strings.
+   Escape all newlines as \\\\n inside JSON strings.
 3. **No repeated list_files**: Call list_files on any directory at most once. Use that knowledge.
 4. **Use read_lines**: For large files, use read_lines with start/end instead of re-reading the whole file.
 5. **Execution Loop**: Call one tool per step, wait for result, then call next tool or finish.
 6. **Finish with result**: {"thought":"summary","result":"what was accomplished","files_changed":["path1"]}
+7. **Be thorough**: Read ALL relevant files before acting. Do NOT cut corners.
 `;
+
+/**
+ * Minimum files that should be read per agent type.
+ * Researcher must read enough files to provide useful context.
+ */
+const MIN_FILES_READ = {
+  researcher: 4,
+  tester: 3,
+  coder: 1,
+  reviewer: 2,
+  docs: 2,
+  devops: 1,
+};
 
 /**
  * Runs a single sub-agent on a specific subtask.
@@ -83,12 +98,22 @@ async function runSubAgent({ agentId, task, context, model, onEvent, maxSteps = 
 
   let toolsUsed = 0;
   let writeToolsUsed = 0;
+  let filesRead = 0;        // track how many files were actually read
   let noToolRetries = 0;
   const MAX_NO_TOOL_RETRIES = 3;
   const listedDirs = new Set(); // track listed directories to detect repetition
+  const readFiles = new Set();  // track read files to measure thoroughness
 
   for (let step = 1; step <= maxSteps; step++) {
-    onEvent({ type: "agent_step", agent: agentId, step, message: `${agentDef.emoji} ${agentDef.name} — step ${step}` });
+    onEvent({ type: "agent_step", agent: agentId, step, message: `${agentDef.emoji} ${agentDef.name} — step ${step}/${maxSteps}` });
+
+    // Warn at 75% of steps to encourage progress
+    if (step === Math.floor(maxSteps * 0.75)) {
+      messages.push({
+        role: "user",
+        content: `NOTE: You have used ${step}/${maxSteps} steps. You have ${maxSteps - step} steps remaining. Start wrapping up — if you need to write files, do it NOW.`
+      });
+    }
 
     if (step === maxSteps) {
       messages.push({
@@ -150,6 +175,15 @@ async function runSubAgent({ agentId, task, context, model, onEvent, maxSteps = 
         listedDirs.add(dir);
       }
 
+      // Track file reads for thoroughness checking
+      if (toolName === "read_file" || toolName === "read_lines") {
+        const filePath = args.path || args.file || "";
+        if (filePath && !readFiles.has(filePath)) {
+          readFiles.add(filePath);
+          filesRead++;
+        }
+      }
+
       toolsUsed++;
       if (WRITE_TOOLS.has(toolName)) writeToolsUsed++;
 
@@ -174,7 +208,7 @@ async function runSubAgent({ agentId, task, context, model, onEvent, maxSteps = 
         noToolRetries++;
         if (noToolRetries >= MAX_NO_TOOL_RETRIES) {
           onEvent({ type: "agent_done", agent: agentId, result, data });
-          return { agent: agentId, result, data, steps: step };
+          return { agent: agentId, result, data, steps: step, filesRead };
         }
         messages.push({ role: "assistant", content: raw });
         messages.push({
@@ -189,7 +223,7 @@ async function runSubAgent({ agentId, task, context, model, onEvent, maxSteps = 
         noToolRetries++;
         if (noToolRetries >= MAX_NO_TOOL_RETRIES) {
           onEvent({ type: "agent_done", agent: agentId, result, data });
-          return { agent: agentId, result, data, steps: step };
+          return { agent: agentId, result, data, steps: step, filesRead };
         }
         messages.push({ role: "assistant", content: raw });
         messages.push({
@@ -199,8 +233,24 @@ async function runSubAgent({ agentId, task, context, model, onEvent, maxSteps = 
         continue;
       }
 
-      onEvent({ type: "agent_done", agent: agentId, result, data });
-      return { agent: agentId, result, data, steps: step };
+      // Check thoroughness — researcher/tester must read enough files
+      const minFiles = MIN_FILES_READ[agentId] || 0;
+      if (filesRead < minFiles && step < maxSteps - 1) {
+        noToolRetries++;
+        if (noToolRetries >= MAX_NO_TOOL_RETRIES) {
+          onEvent({ type: "agent_done", agent: agentId, result: `${result}\n\n⚠️ Warning: Only ${filesRead} files were read (minimum recommended: ${minFiles})`, data });
+          return { agent: agentId, result, data, steps: step, filesRead };
+        }
+        messages.push({ role: "assistant", content: raw });
+        messages.push({
+          role: "user",
+          content: `WARNING: You have only read ${filesRead} files so far, but thorough analysis requires reading at least ${minFiles} files. You MUST read more source files before returning your result. Read the files that are most relevant to your task. (Attempt ${noToolRetries}/${MAX_NO_TOOL_RETRIES})`
+        });
+        continue;
+      }
+
+      onEvent({ type: "agent_done", agent: agentId, result, data, filesRead });
+      return { agent: agentId, result, data, steps: step, filesRead };
     }
 
     // No tool and no result
@@ -211,7 +261,7 @@ async function runSubAgent({ agentId, task, context, model, onEvent, maxSteps = 
     });
   }
 
-  return { agent: agentId, result: "Max steps reached without completion", truncated: true };
+  return { agent: agentId, result: "Max steps reached without completion", truncated: true, filesRead };
 }
 
 module.exports = { runSubAgent };

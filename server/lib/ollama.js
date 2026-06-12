@@ -48,18 +48,18 @@ function _callOllama(messages, model, timeout) {
       method: "POST",
       headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
     }, res => {
-      let data = "";
-      res.on("data", c => data += c);
+      let rawResponseText = "";
+      res.on("data", c => rawResponseText += c);
       res.on("end", () => {
         try {
-          const parsed = JSON.parse(data);
+          const parsed = JSON.parse(rawResponseText);
           if (parsed.error) {
             reject(new Error(`Ollama error: ${parsed.error}`));
           } else {
             resolve(parsed.message.content);
           }
         } catch (e) {
-          reject(new Error(`Parse error: ${e.message}\nRaw: ${data.slice(0, 200)}`));
+          reject(new Error(`Parse error: ${e.message}\nRaw: ${(rawResponseText || "").slice(0, 200)}`));
         }
       });
     });

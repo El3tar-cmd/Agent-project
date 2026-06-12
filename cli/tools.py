@@ -160,6 +160,10 @@ def think(thought):
     """Explicit reasoning step — no side effects."""
     return f"Thought recorded. Proceed with your plan."
 
+def sequential_thinking(thought, thought_number=1, total_thoughts=1, next_thought_needed=True):
+    """Explicit step-by-step reasoning — no side effects."""
+    return f"Thought #{thought_number}/{total_thoughts} processed. {'Next thought step needed.' if next_thought_needed else 'Ready to proceed with action.'}"
+
 def run_command_stream(cmd, background=False):
     if any(re.search(p, cmd) for p in DANGEROUS_PATTERNS):
         return "BLOCKED: dangerous command."
@@ -545,6 +549,12 @@ TOOL_MAP = {
     "show_image":      lambda a: show_image(a.get("path", "")),
     "cd":              lambda a: cd(a.get("path", a.get("dir", ""))),
     "think":           lambda a: think(a.get("thought", a.get("reasoning", ""))),
+    "sequential_thinking": lambda a: sequential_thinking(
+        a.get("thought", a.get("reasoning", "")),
+        int(a.get("thought_number", a.get("thoughtNumber", 1))),
+        int(a.get("total_thoughts", a.get("totalThoughts", 1))),
+        a.get("next_thought_needed", a.get("nextThoughtNeeded", True)) not in [False, "False", "false"]
+    ),
     "http_post":       lambda a: http_post(a.get("url",""), a.get("body", a.get("data",{})), a.get("method","POST"), a.get("headers")),
     "find_files":      lambda a: find_files(a.get("pattern",""), a.get("directory", a.get("path",".")), a.get("ext",""), int(a.get("maxdepth",8))),
     "zip":             lambda a: zip_archive(a.get("action","create"), a.get("file", a.get("archive","")), a.get("source","."), a.get("dest",".")),

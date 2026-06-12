@@ -39,6 +39,63 @@ export function ChatPane({
 }) {
   const isEmpty = msgs.length === 0;
 
+  const [listening, setListening] = React.useState(false);
+  const [speechLang, setSpeechLang] = React.useState("ar-EG");
+  const recognitionRef = React.useRef(null);
+
+  const toggleListening = React.useCallback(() => {
+    if (listening) {
+      recognitionRef.current?.stop();
+      setListening(false);
+      return;
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Speech recognition is not supported in this browser.");
+      return;
+    }
+
+    const rec = new SpeechRecognition();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = speechLang;
+
+    rec.onstart = () => {
+      setListening(true);
+      addSys(`🎙️ Listening (${speechLang === "ar-EG" ? "العربية" : "English"})… Speak now.`);
+    };
+
+    rec.onresult = (e) => {
+      let finalTranscript = "";
+      for (let i = e.resultIndex; i < e.results.length; ++i) {
+        if (e.results[i].isFinal) {
+          finalTranscript += e.results[i][0].transcript;
+        }
+      }
+      if (finalTranscript) {
+        setInput(prev => {
+          const space = prev && !prev.endsWith(" ") ? " " : "";
+          return prev + space + finalTranscript;
+        });
+      }
+    };
+
+    rec.onerror = (e) => {
+      console.error("Speech recognition error:", e.error);
+      setListening(false);
+      addSys(`❌ Speech error: ${e.error}`);
+    };
+
+    rec.onend = () => {
+      setListening(false);
+      addSys("🎙️ Stopped listening.");
+    };
+
+    recognitionRef.current = rec;
+    rec.start();
+  }, [listening, speechLang, setInput, addSys]);
+
   const renderMsg = m => {
     if (m.role === "user") {
       return (
@@ -77,6 +134,17 @@ export function ChatPane({
           return <div key={m.id} className="ev ev-step"><I.Term /><span>{m.message}</span></div>;
         case "thought":
           return <div key={m.id} className="ev ev-thought"><I.Brain /><span>{m.message}</span></div>;
+        case "thinking_step":
+          return (
+            <div key={m.id} className="ev ev-thought" style={{ display: "flex", flexDirection: "column", gap: 4, background: "rgba(188, 140, 255, 0.04)", borderLeft: "2px solid var(--purple)", padding: "8px 12px", borderRadius: "0 6px 6px 0", animation: "fu .2s ease", margin: "4px 0" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--purple)", fontWeight: 600 }}>
+                <I.Brain width={12} height={12} />
+                <span>{m.tool === "think" ? "Planning" : `Thinking (${m.thoughtNumber}/${m.totalThoughts})`}</span>
+              </div>
+              {m.thought && <div style={{ fontSize: 11, color: "var(--fg)", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{m.thought}</div>}
+              {m.result && <div style={{ fontSize: 10, color: "var(--fg3)", fontStyle: "italic", marginTop: 2 }}>{m.result}</div>}
+            </div>
+          );
         case "tool":
           return <div key={m.id} className="ev ev-tool"><I.Tool /><span style={{ wordBreak: "break-all" }}>{m.message}</span></div>;
         case "result":
@@ -232,6 +300,55 @@ export function ChatPane({
           <div className="hint">Enter send · Shift+Enter newline · Ctrl+V paste image</div>
         </div>
         
+        <button
+          type="button"
+          onClick={() => setSpeechLang(prev => prev === "ar-EG" ? "en-US" : "ar-EG")}
+          style={{
+            flexShrink: 0,
+            padding: "2px 6px",
+            background: "var(--bg2)",
+            border: "1px solid var(--border2)",
+            borderRadius: 8,
+            color: "var(--cyan)",
+            fontSize: 10,
+            fontWeight: 700,
+            cursor: "pointer",
+            minHeight: 38,
+            minWidth: 38,
+            alignSelf: "center",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center"
+          }}
+          title={speechLang === "ar-EG" ? "Switch to English Speech Input" : "Switch to Arabic Speech Input"}
+          disabled={listening || running}
+        >
+          {speechLang === "ar-EG" ? "AR" : "EN"}
+        </button>
+
+        <button
+          type="button"
+          onClick={toggleListening}
+          style={{
+            flexShrink: 0,
+            padding: "9px 10px",
+            background: listening ? "var(--red, #ff7b72)" : "var(--bg2)",
+            border: "1px solid var(--border2)",
+            borderRadius: 8,
+            color: listening ? "#fff" : "var(--fg2)",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            minHeight: 38,
+            minWidth: 38,
+            justifyContent: "center"
+          }}
+          title={listening ? "Stop listening" : "Voice Input (Speech-to-Text)"}
+          disabled={running}
+        >
+          <I.Mic width={13} height={13} style={{ color: listening ? "#fff" : "var(--fg2)" }} />
+        </button>
+
         <label style={{ flexShrink: 0, padding: "9px 10px", background: "var(--bg2)", border: "1px solid var(--border2)", borderRadius: 8, color: "var(--fg2)", cursor: "pointer", display: "flex", alignItems: "center", minHeight: 38, minWidth: 38, justifyContent: "center" }} title="Attach image">
           <input
             type="file"

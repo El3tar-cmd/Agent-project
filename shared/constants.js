@@ -43,7 +43,7 @@ const HISTORY_FILE = ".agent_history.json";
 const WORKSPACES_FILE = ".agent_workspaces.json";
 
 /** Swarm constants */
-const SWARM_MAX_STEPS    = 15;   // lowered from 100 — prevents per-agent token explosion
+const SWARM_MAX_STEPS    = 100;  // raised to 100 to prevent premature termination
 const SWARM_STEP_TIMEOUT = 120000; // 2 min per step
 const SWARM_MAX_ROUNDS   = 5;
 

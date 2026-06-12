@@ -11,6 +11,8 @@ const TelegramBot = require("node-telegram-bot-api");
 const http        = require("http");
 const https       = require("https");
 const fs          = require("fs");
+const path        = require("path");
+const { exec }    = require("child_process");
 
 // ── CONFIG ──────────────────────────────────────────────────
 const TOKEN      = process.env.TELEGRAM_TOKEN;
@@ -33,7 +35,7 @@ const sessions = new Map();  // chatId → { model, persona, running, abortCtrl 
 
 function getSession(chatId) {
   if (!sessions.has(chatId)) {
-    sessions.set(chatId, { model: null, persona: "coder", running: false });
+    sessions.set(chatId, { model: null, persona: "coder", running: false, autoPlan: false, voiceReply: false, lastInputType: "text" });
   }
   return sessions.get(chatId);
 }
@@ -87,7 +89,7 @@ async function runAgent(chatId, message, model, persona, msgId) {
 
   session.running = true;
   const url  = new URL(SERVER_URL + "/api/run");
-  const body = JSON.stringify({ message, model, persona });
+  const body = JSON.stringify({ message, model, persona, auto_plan: session.autoPlan });
   const lib  = url.protocol === "https:" ? https : http;
 
   // ── Live status message ──────────────────────────────────
@@ -218,6 +220,32 @@ async function runAgent(chatId, message, model, persona, msgId) {
           currentThought = ev.message || "";
           await setStatus(buildStatusText());
           break;
+
+        case "thinking_step": {
+          const tool = ev.tool;
+          const args = ev.args || {};
+          const result = ev.result || "";
+          const thoughtText = args.thought || args.reasoning || "";
+          const thoughtNumber = args.thoughtNumber || args.thought_number || 1;
+          const totalThoughts = args.totalThoughts || args.total_thoughts || 1;
+
+          steps.push({ tool, args, result, ok: true });
+
+          let header = `🧠 <b>Planning…</b>`;
+          if (tool === "sequential_thinking") {
+            header = `🧠 <b>Thinking (${thoughtNumber}/${totalThoughts})</b>`;
+          }
+
+          let text = `${header}\n\n`;
+          if (thoughtText) {
+            text += `💭 <i>${escHtml(thoughtText)}</i>\n\n`;
+          }
+          text += `<code>${escHtml(result)}</code>`;
+
+          await sendMsg(text);
+          await setStatus(buildStatusText());
+          break;
+        }
 
         case "tool_call":
           curStep = { tool: ev.tool, args: ev.args||{}, result:null, ok:false };
@@ -526,6 +554,73 @@ async function runAgent(chatId, message, model, persona, msgId) {
   });
 }
 
+// ── SEND VOICE REPLY ────────────────────────────────────────
+async function sendVoiceReply(chatId, text) {
+  try {
+    // Strip HTML tags
+    let cleanText = text
+      .replace(/<[^>]*>/g, "")
+      .replace(/[\`\*\_\[\]\(\)\#\+\-\.\!\=\{\}\<\>]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (cleanText.length > 500) {
+      const sentences = cleanText.match(/[^.!?]+[.!?]+/g) || [cleanText];
+      let summary = "";
+      for (const sent of sentences) {
+        if ((summary + sent).length > 450) break;
+        summary += " " + sent;
+      }
+      cleanText = summary.trim() || cleanText.slice(0, 450) + "…";
+    }
+
+    if (!cleanText) return;
+
+    const tempDir = path.join(__dirname, "../scratch");
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+    const mp3Path = path.join(tempDir, `tts_${Date.now()}.mp3`);
+    const oggPath = path.join(tempDir, `tts_${Date.now()}.ogg`);
+    const txtPath = path.join(tempDir, `tts_${Date.now()}.txt`);
+
+    fs.writeFileSync(txtPath, cleanText, "utf8");
+
+    const ttsScript = path.join(__dirname, "tts.py");
+
+    await new Promise((resolve, reject) => {
+      exec(`python3 "${ttsScript}" "${txtPath}" "${mp3Path}"`, (err, stdout, stderr) => {
+        try { fs.unlinkSync(txtPath); } catch(_) {}
+        if (err) return reject(new Error(stderr || err.message));
+        resolve();
+      });
+    });
+
+    // Convert mp3 to ogg
+    await new Promise((resolve, reject) => {
+      exec(`ffmpeg -y -i "${mp3Path}" -c:a libopus -b:a 16k "${oggPath}"`, (err, stdout, stderr) => {
+        if (err) {
+          exec(`ffmpeg -y -i "${mp3Path}" -acodec libopus "${oggPath}"`, (err2) => {
+            if (err2) return reject(err2);
+            resolve();
+          });
+        } else {
+          resolve();
+        }
+      });
+    });
+
+    // Send voice
+    await bot.sendVoice(chatId, oggPath);
+
+    // Clean up
+    try { fs.unlinkSync(mp3Path); } catch(_) {}
+    try { fs.unlinkSync(oggPath); } catch(_) {}
+  } catch (err) {
+    console.error("Voice reply failed:", err.message);
+  }
+}
+
 // ── SEND FINAL MESSAGE ──────────────────────────────────────
 async function sendFinalMessage(chatId, text, steps, stepsArr) {
   const toolCount = stepsArr?.length || 0;
@@ -540,6 +635,12 @@ async function sendFinalMessage(chatId, text, steps, stepsArr) {
     } catch {
       try { await bot.sendMessage(chatId, (i===0?`✅ Done (${steps} steps)\n\n`:"")+chunks[i]); } catch {}
     }
+  }
+
+  // Speak response if voice was used or enabled
+  const session = getSession(chatId);
+  if (session.lastInputType === "voice" || session.voiceReply) {
+    await sendVoiceReply(chatId, text);
   }
 }
 
@@ -729,6 +830,7 @@ function toolEmoji(tool) {
     git_status:"📊", git_diff:"📊", grep:"🔎", cd:"📍",
     ask_human:"❓", find_files:"🗂️", zip:"🗜️",
     diff_files:"↔️", lint:"🔬",
+    think:"🧠", sequential_thinking:"🧠",
   };
   return map[tool] || "⚙️";
 }
@@ -785,7 +887,9 @@ bot.onText(/\/start/, async msg => {
     `/screenshot &lt;url&gt; — take screenshot\n\n` +
     `<b>⚙️ Configuration</b>\n` +
     `/model — switch Ollama model\n` +
-    `/persona — switch agent persona\n\n` +
+    `/persona — switch agent persona\n` +
+    `/autoplan — toggle automatic planning mode\n` +
+    `/voice — toggle voice replies (TTS)\n\n` +
     `<b>🐝 Swarm</b>\n` +
     `/swarm &lt;task&gt; — run multi-agent swarm\n\n` +
     `<b>📊 Processes</b>\n` +
@@ -881,6 +985,20 @@ bot.onText(/\/persona/, msg => {
     row.map(p => ({ text: p, callback_data: `persona_${p.split(" ")[1].toLowerCase()}` }))
   );
   bot.sendMessage(msg.chat.id, "Choose a persona:", { reply_markup: { inline_keyboard: buttons } });
+});
+
+bot.onText(/\/autoplan/, msg => {
+  if (!isAllowed(msg)) return;
+  const session = getSession(msg.chat.id);
+  session.autoPlan = !session.autoPlan;
+  bot.sendMessage(msg.chat.id, `⚙️ Auto-plan mode is now <b>${session.autoPlan ? "ENABLED" : "DISABLED"}</b>.`, { parse_mode: "HTML" });
+});
+
+bot.onText(/\/voice/, msg => {
+  if (!isAllowed(msg)) return;
+  const session = getSession(msg.chat.id);
+  session.voiceReply = !session.voiceReply;
+  bot.sendMessage(msg.chat.id, `🔊 Voice replies are now <b>${session.voiceReply ? "ENABLED" : "DISABLED"}</b>.`, { parse_mode: "HTML" });
 });
 
 bot.onText(/\/stop/, async msg => {
@@ -1118,17 +1236,71 @@ bot.on("document", async msg => {
   } catch(e) { bot.sendMessage(chatId, `❌ Upload error: ${e.message}`); }
 });
 
+// ── VOICE / AUDIO MESSAGE HANDLER ──────────────────────────────
+bot.on("voice", async msg => {
+  if (!isAllowed(msg)) return;
+  const chatId  = msg.chat.id;
+  const session = getSession(chatId);
+  session.lastInputType = "voice";
+
+  try {
+    const statusMsg = await bot.sendMessage(chatId, "🎤 Converting voice to text…");
+
+    const voice    = msg.voice;
+    const fileInfo = await bot.getFile(voice.file_id);
+    const fileUrl  = `https://api.telegram.org/file/bot${TOKEN}/${fileInfo.file_path}`;
+
+    const res  = await fetch(fileUrl);
+    const buf  = Buffer.from(await res.arrayBuffer());
+    
+    const ext  = fileInfo.file_path.split(".").pop() || "ogg";
+    const tempName = `voice_${Date.now()}.${ext}`;
+    
+    const tempDir = path.join(__dirname, "../scratch");
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+    const tempPath = path.join(tempDir, tempName);
+    fs.writeFileSync(tempPath, buf);
+
+    const scriptPath = path.join(__dirname, "stt.py");
+    exec(`python3 "${scriptPath}" "${tempPath}"`, async (error, stdout, stderr) => {
+      // Clean up voice file
+      try { fs.unlinkSync(tempPath); } catch(_) {}
+      try { await bot.deleteMessage(chatId, statusMsg.message_id); } catch(_) {}
+
+      if (error) {
+        return bot.sendMessage(chatId, `❌ Transcription failed: ${error.message}`);
+      }
+
+      const transcription = stdout.trim();
+      if (!transcription || transcription.startsWith("ERROR:")) {
+        return bot.sendMessage(chatId, `❌ Could not transcribe audio. Error: ${transcription}`);
+      }
+
+      await bot.sendMessage(chatId, `🗣️ <b>You:</b> <i>${escHtml(transcription)}</i>`, { parse_mode: "HTML" });
+      
+      // Run agent
+      await runAgent(chatId, transcription, session.model, session.persona, msg.message_id);
+    });
+
+  } catch(e) {
+    bot.sendMessage(chatId, `❌ Voice handler error: ${e.message}`);
+  }
+});
+
 // ── MESSAGE EVENTS ────────────────────────────────────────────
 bot.on("message", async msg => {
   if (!isAllowed(msg)) { bot.sendMessage(msg.chat.id, "⛔ Not authorized."); return; }
   if (msg.text?.startsWith("/")) return;
-  if (msg.photo || msg.document) return;
+  if (msg.photo || msg.document || msg.voice) return;
 
   const text = msg.text?.trim();
   if (!text) return;
 
   const chatId  = msg.chat.id;
   const session = getSession(chatId);
+  session.lastInputType = "text";
 
   if (session.pendingAsk) {
     const { runId } = session.pendingAsk;
@@ -1146,7 +1318,7 @@ console.log("\n  🤖 Telegram Agent Bot started");
 console.log(`  📡 Connected to: ${SERVER_URL}`);
 if (ALLOWED_USERS.length) console.log(`  🔒 Allowed users: ${ALLOWED_USERS.join(", ")}`);
 else console.log("  ⚠️  No ALLOWED_USERS set — open to everyone");
-console.log("\n  Commands: /start /model /persona /swarm /processes /kill /screenshot /status /files /cwd /cd /stop /clear");
+console.log("\n  Commands: /start /model /persona /autoplan /swarm /processes /kill /screenshot /status /files /cwd /cd /stop /clear");
 console.log("  Upload: Send any document/file to save it to the workspace\n");
 
 bot.on("polling_error", e => console.error("Polling error:", e.message));

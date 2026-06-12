@@ -78,7 +78,7 @@ function trimContext(ctx, req) {
 
 /** Trim message history to prevent token explosion — keep system + last N messages */
 function trimMessages(messages) {
-  if (messages.length <= MAX_HISTORY_MESSAGES + 1) return messages;
+  if (messages.length <= MAX_HISTORY_MESSAGES + 1) return [...messages];
   const system = messages[0];
   const rest = messages.slice(1);
   return [system, ...rest.slice(-MAX_HISTORY_MESSAGES)];
@@ -116,7 +116,7 @@ router.post("/run", async (req, res) => {
   res.flushHeaders();
 
   let aborted = false;
-  req.on("close", () => { aborted = true; });
+  res.on("close", () => { aborted = true; });
 
   const send = (type, data) => {
     if (aborted) return;
@@ -185,7 +185,9 @@ router.post("/run", async (req, res) => {
       let raw;
       try {
         raw = await askOllama(messages, activeModel);
+        console.log(`[Agent Loop] Step ${n} raw response:`, raw);
       } catch (e) {
+        console.error(`[Agent Loop] Step ${n} Ollama error:`, e);
         send("error", { message: `Ollama error: ${e.message}` });
         break;
       }
@@ -230,6 +232,29 @@ router.post("/run", async (req, res) => {
       if (!toolName) {
         messages.push({ role: "assistant", content: raw });
         // Trim messages in place to prevent explosion
+        const trimmed = trimMessages(messages);
+        messages.length = 0;
+        messages.push(...trimmed);
+        continue;
+      }
+
+      // reasoning tools (think, sequential_thinking)
+      if (toolName === "think" || toolName === "sequential_thinking") {
+        const fn = TOOLS[toolName];
+        const result = fn ? String(await Promise.resolve(fn(args))) : `ERROR: unknown tool '${toolName}'`;
+        
+        send("thinking_step", {
+          tool: toolName,
+          args,
+          result
+        });
+        
+        messages.push({ role: "assistant", content: raw });
+        messages.push({ role: "user", content: `[Tool result: ${toolName}]\n${result}` });
+        ctx += `\n\n[Step ${n}] Tool:${toolName} Result:${result.slice(0, 500)}`;
+        ctx = trimContext(ctx, userMsg);
+        
+        // Trim messages array to prevent context explosion
         const trimmed = trimMessages(messages);
         messages.length = 0;
         messages.push(...trimmed);

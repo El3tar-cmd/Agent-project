@@ -7,7 +7,7 @@ const { askOllama } = require("../server/lib/ollama");
 const { cleanJson } = require("../shared/json");
 const { SUB_AGENTS } = require("./agents");
 const { runSubAgent } = require("./runner");
-const { SWARM_MAX_ROUNDS } = require("../shared/constants");
+const { SWARM_MAX_ROUNDS, SWARM_MAX_STEPS } = require("../shared/constants");
 
 /**
  * Validate and auto-correct plans for file writing tasks to ensure they contain a writer agent.
@@ -140,7 +140,7 @@ async function runOrchestrator({ task, model, onEvent, maxRounds = SWARM_MAX_ROU
         return `### ${SUB_AGENTS[r.agent]?.emoji} ${SUB_AGENTS[r.agent]?.name} completed: "${t?.task || id}"\n${result}`;
       })
       .join("\n\n---\n\n")
-      .slice(0, 8000);
+      .slice(0, 15000);
 
     // For each task in batch, build its specific context including only its dependencies
     const batchPromises = batch.map(t => {
@@ -152,17 +152,27 @@ async function runOrchestrator({ task, model, onEvent, maxRounds = SWARM_MAX_ROU
           return `### Result from ${SUB_AGENTS[r.agent]?.name} (${depId}): "${depTask?.task || depId}"\n${typeof r.result === 'string' ? r.result : JSON.stringify(r.result)}`;
         })
         .join("\n\n---\n\n")
-        .slice(0, 10000);
+        .slice(0, 20000);
 
       const ctx = depContext || prevContext || archPlan.plan || '';
+
+      // Different agents need different step budgets
+      const agentMaxSteps = {
+        researcher: 100, // needs many steps to read all files thoroughly
+        tester: 90,      // needs to read source + write tests + run them
+        coder: 85,       // needs to read context + write code + verify
+        docs: 70,        // needs to read source + write docs
+        reviewer: 60,    // reads and analyzes
+        devops: 75,      // writes configs + runs commands
+      };
 
       return runSubAgent({
         agentId:  t.agent,
         task:     t.task,
-        context:  ctx,
+        context:  `## Original User Task\n${task}\n\n## Context from Previous Agents\n${ctx}`,
         model,
         onEvent,
-        maxSteps: 20,
+        maxSteps: agentMaxSteps[t.agent] || SWARM_MAX_STEPS,
       }).then(r => ({ ...r, taskId: t.id }));
     });
 
