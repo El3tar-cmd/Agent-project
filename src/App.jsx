@@ -14,12 +14,13 @@ import { ChatPane } from "./components/Chat";
 import { useWorkspace } from "./hooks/useWorkspace";
 import { useEditor } from "./hooks/useEditor";
 import { useAgent } from "./hooks/useAgent";
+import { PinnedPrompts } from "./components/PinnedPrompts";
 
 const TOOLS_LIST = [
   "read_file", "read_lines", "write_file", "append_file", "replace_text",
   "run_command", "list_files", "search_in_files", "create_dir", "delete_file",
-  "http_get", "search_web", "python_eval", "git_status", "git_diff", "grep",
-  "cd", "think", "screenshot",
+  "http_get", "http_post", "search_web", "python_eval", "git_status", "git_diff",
+  "grep", "cd", "think", "screenshot", "find_files", "zip", "diff_files", "lint",
 ];
 
 export default function App() {
@@ -326,13 +327,36 @@ export default function App() {
               <button className="sbbtn" onClick={() => setShowHistory(true)}><I.History width={13} height={13} /> Task History</button>
               <button className="sbbtn" onClick={() => setShowMemory(true)}><I.Mem width={13} height={13} /> Agent Memory</button>
               <button className="sbbtn" onClick={openLog}><I.Log width={13} height={13} /> View Log</button>
+              <button className="sbbtn" onClick={agent.exportChat} style={{ opacity: agent.msgs.length ? 1 : 0.45 }}><I.File width={13} height={13} /> Export Chat</button>
               <button className="sbbtn danger" onClick={agent.clearSession}><I.Trash width={13} height={13} /> Clear Session</button>
 
               <div className="stitle" style={{ marginTop: 4 }}>Session</div>
               <div className="scard">
                 <div className="srow"><span>Status</span><span style={{ color: agent.status === "running" ? "var(--cyan)" : agent.status === "paused" ? "var(--yellow)" : "var(--green)" }}>{agent.status}</span></div>
                 <div className="srow"><span>Steps</span><span>{agent.stepCount}</span></div>
+                <div className="srow" style={{ cursor: "pointer" }} onClick={() => agent.setAutoPlan(v => !v)}>
+                  <span>Auto-Plan</span>
+                  <span style={{
+                    display: "inline-flex", alignItems: "center", gap: 4,
+                    color: agent.autoPlan ? "var(--cyan)" : "var(--fg3)",
+                    fontSize: 10, fontWeight: 600,
+                  }}>
+                    <span style={{
+                      width: 26, height: 14, borderRadius: 7, background: agent.autoPlan ? "var(--cyan)" : "var(--border)",
+                      position: "relative", transition: "background .2s", display: "inline-block", flexShrink: 0,
+                    }}>
+                      <span style={{
+                        position: "absolute", top: 2, left: agent.autoPlan ? 14 : 2,
+                        width: 10, height: 10, borderRadius: "50%", background: "#fff",
+                        transition: "left .2s",
+                      }} />
+                    </span>
+                    {agent.autoPlan ? "ON" : "OFF"}
+                  </span>
+                </div>
               </div>
+
+              <PinnedPrompts input={agent.input} setInput={agent.setInput} />
 
               <div className="stitle" style={{ marginTop: 4 }}>Tools</div>
               <div className="chips">{TOOLS_LIST.map(t => <div key={t} className={`chip${agent.activeTool === t ? " active" : ""}`}>{t}</div>)}</div>

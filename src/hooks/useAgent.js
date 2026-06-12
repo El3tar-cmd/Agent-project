@@ -9,6 +9,7 @@ export function useAgent(fetchTree, refreshFiles, isMobile, setDesktopPanel) {
   const [input, setInput] = useState("");
   const [running, setRunning] = useState(false);
   const [status, setStatus] = useState("idle");
+  const [autoPlan, setAutoPlan] = useState(false);
   const [models, setModels] = useState([]);
   const [model, setModel] = useState("");
   const [activeTool, setActive] = useState(null);
@@ -159,7 +160,7 @@ export function useAgent(fetchTree, refreshFiles, isMobile, setDesktopPanel) {
       const res = await fetch("/api/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, model }),
+        body: JSON.stringify({ message: text, model, auto_plan: autoPlan }),
         signal: ctrl.signal
       });
       const reader = res.body.getReader();
@@ -275,6 +276,32 @@ export function useAgent(fetchTree, refreshFiles, isMobile, setDesktopPanel) {
     }
   }, [uploadImage, addSys]);
 
+  const exportChat = useCallback(() => {
+    if (!msgs.length) return;
+    const lines = [`# Agent Chat Export\n`, `**Date:** ${new Date().toLocaleString()}\n\n---\n`];
+    for (const m of msgs) {
+      if (m.role === "user") {
+        lines.push(`\n### 👤 User\n${m.content || ""}\n`);
+      } else if (m.role === "assistant") {
+        lines.push(`\n### 🤖 Agent\n${m.content || ""}\n`);
+      } else if (m.role === "tool") {
+        lines.push(`\n> **Tool \`${m.tool || "?"}\`:** ${(m.content || "").slice(0, 300)}\n`);
+      } else if (m.role === "diff") {
+        lines.push(`\n\`\`\`diff\n${m.content || ""}\n\`\`\`\n`);
+      } else if (m.role === "system") {
+        lines.push(`\n*${m.content || ""}*\n`);
+      }
+    }
+    const md = lines.join("\n");
+    const blob = new Blob([md], { type: "text/markdown" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `chat_${new Date().toISOString().slice(0,10)}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [msgs]);
+
   const sendWithImages = useCallback(() => {
     let msg = input.trim();
     if (!msg && images.length === 0) return;
@@ -326,6 +353,9 @@ export function useAgent(fetchTree, refreshFiles, isMobile, setDesktopPanel) {
     openLog,
     uploadImage,
     handlePaste,
+    exportChat,
+    autoPlan,
+    setAutoPlan,
     addSys
   };
 }

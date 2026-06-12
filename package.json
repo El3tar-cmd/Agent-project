@@ -7,13 +7,15 @@
     "build": "vite build",
     "preview": "vite preview",
     "server": "node server/index.js",
-    "start": "concurrently \"node server/index.js\" \"vite\""
+    "start": "concurrently \"node server/index.js\" \"vite\"",
+    "telegram": "node telegram/bot.js"
   },
   "dependencies": {
     "concurrently": "^8.2.0",
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
     "express": "^4.18.2",
+    "node-telegram-bot-api": "^0.66.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "ws": "^8.16.0"

@@ -470,6 +470,52 @@ async function runAgent(chatId, message, model, persona, msgId) {
           await sendMsg(`${header}\n<code>${escHtml(result||"")}</code>`);
           break;
 
+        case "http_post": {
+          const url    = args.url || "";
+          const method = args.method || "POST";
+          const lines  = (result||"").split("\n");
+          const status = lines[0] || "";
+          const body   = lines.slice(2,7).join("\n");
+          await sendMsg(
+            `${header}\n📡 <code>${method} ${escHtml(url.slice(0,70))}</code>\n` +
+            `<i>${escHtml(status)}</i>\n<pre>${escHtml(body.slice(0,600))}</pre>`
+          );
+          break;
+        }
+
+        case "find_files": {
+          const found = (result||"").split("\n").filter(l => l && !l.startsWith("Found"));
+          const summary = (result||"").split("\n")[0] || "";
+          await sendMsg(
+            `${header}\n🗂️ <i>${escHtml(summary)}</i>\n\n<pre>${escHtml(found.slice(0,30).join("\n"))}</pre>`
+          );
+          break;
+        }
+
+        case "zip": {
+          await sendMsg(`${header}\n<code>${escHtml(result||"")}</code>`);
+          break;
+        }
+
+        case "diff_files": {
+          const lines   = (result||"").split("\n");
+          const summary = lines.slice(0,2).join("\n");
+          const diff    = lines.slice(3,25).join("\n");
+          await sendMsg(
+            `${header}\n<i>${escHtml(summary)}</i>\n\n<pre>${escHtml(diff.slice(0,2000))}</pre>`
+          );
+          break;
+        }
+
+        case "lint": {
+          const issues = (result||"").split("\n").filter(Boolean);
+          const icon   = isErr || result?.includes("❌") ? "🔴" : "🟢";
+          await sendMsg(
+            `${header} ${icon}\n<pre>${escHtml(issues.slice(0,20).join("\n").slice(0,1500))}</pre>`
+          );
+          break;
+        }
+
         default:
           if (isErr) {
             await sendMsg(`${header}\n<pre>${escHtml((result||"").slice(0,500))}</pre>`);
@@ -679,8 +725,10 @@ function toolEmoji(tool) {
     read_file:"📖", write_file:"✍️", replace_text:"🔄",
     run_command:"💻", list_files:"📂", search_in_files:"🔍",
     create_dir:"📁", delete_file:"🗑️", http_get:"🌐",
-    python_eval:"🐍", git_status:"📊", git_diff:"📊",
-    grep:"🔎", cd:"📍", search_web:"🔍", ask_human:"❓",
+    http_post:"📡", search_web:"🔍", python_eval:"🐍",
+    git_status:"📊", git_diff:"📊", grep:"🔎", cd:"📍",
+    ask_human:"❓", find_files:"🗂️", zip:"🗜️",
+    diff_files:"↔️", lint:"🔬",
   };
   return map[tool] || "⚙️";
 }
@@ -729,14 +777,34 @@ bot.onText(/\/start/, async msg => {
     `/model — switch Ollama model\n` +
     `/persona — switch agent persona\n` +
     `/swarm &lt;task&gt; — run multi-agent swarm\n` +
+    `/files — list workspace files\n` +
     `/status — server status\n` +
     `/cwd — show working directory\n` +
     `/cd &lt;path&gt; — change directory\n` +
     `/stop — stop running agent\n` +
     `/clear — clear session\n\n` +
+    `📎 Send any <b>file</b> to upload it to the workspace!\n` +
     `Just type any message to chat with the agent!`,
     { parse_mode: "HTML" }
   );
+});
+
+// ── /files — list workspace files ────────────────────────────
+bot.onText(/\/files/, async msg => {
+  if (!isAllowed(msg)) return;
+  try {
+    const d = await apiGet("/api/cwd");
+    const cwd = d.cwd || ".";
+    const result = await apiPost("/api/tool", { tool: "list_files", args: { path: cwd } });
+    const items = (result.result || "").split("\n").filter(Boolean).slice(0, 40);
+    const dirs  = items.filter(l => l.startsWith("📁")).length;
+    const files = items.filter(l => l.startsWith("📄")).length;
+    bot.sendMessage(msg.chat.id,
+      `📂 <b>Workspace Files</b>\n<code>${escHtml(cwd)}</code>\n` +
+      `<i>${dirs} folders, ${files} files</i>\n\n<pre>${escHtml(items.join("\n"))}</pre>`,
+      { parse_mode: "HTML" }
+    );
+  } catch (e) { bot.sendMessage(msg.chat.id, `❌ ${e.message}`); }
 });
 
 bot.onText(/\/status/, async msg => {
@@ -983,32 +1051,61 @@ bot.on("photo", async msg => {
   } catch(e) { bot.sendMessage(chatId, `❌ Photo error: ${e.message}`); }
 });
 
-// ── DOCUMENT HANDLER ──────────────────────────────────────────
+// ── DOCUMENT / FILE UPLOAD HANDLER ────────────────────────────
 bot.on("document", async msg => {
   if (!isAllowed(msg)) return;
   const chatId  = msg.chat.id;
   const session = getSession(chatId);
   const doc     = msg.document;
-  const caption = msg.caption?.trim() || `Analyze this file: ${doc.file_name}`;
-
-  const textTypes = ["text/","application/json","application/xml","application/javascript","application/x-python"];
-  if (!textTypes.some(t => doc.mime_type?.startsWith(t)) && !doc.file_name?.match(/\.(js|ts|py|json|html|css|md|txt|sh|yaml|yml|env|jsx|tsx)$/i)) {
-    return bot.sendMessage(chatId, "⚠️ Only text/code files are supported.");
-  }
+  const caption = msg.caption?.trim() || "";
 
   try {
+    bot.sendMessage(chatId, `📥 Uploading <code>${escHtml(doc.file_name)}</code> to workspace…`, { parse_mode:"HTML" });
+
     const fileInfo = await bot.getFile(doc.file_id);
     const fileUrl  = `https://api.telegram.org/file/bot${TOKEN}/${fileInfo.file_path}`;
     const res      = await fetch(fileUrl);
-    const text     = await res.text();
+    const buf      = Buffer.from(await res.arrayBuffer());
+    const ext      = doc.file_name.split(".").pop() || "bin";
+    const mime     = doc.mime_type || "application/octet-stream";
 
-    const savePath = `/tmp/${doc.file_name}`;
-    await apiPost("/api/file", { path: savePath, content: text });
+    // Upload to workspace via /api/upload/base64
+    const uploaded = await apiPost("/api/upload/base64", {
+      data: `data:${mime};base64,${buf.toString("base64")}`,
+      ext, name: doc.file_name
+    });
 
-    const prompt = `${caption}\n\n[File saved at: ${savePath}]\nContent:\n\`\`\`\n${text.slice(0,3000)}\n\`\`\``;
-    bot.sendMessage(chatId, `📄 File received: <code>${escHtml(doc.file_name)}</code>`, { parse_mode:"HTML" });
-    await runAgent(chatId, prompt, session.model, session.persona, msg.message_id);
-  } catch(e) { bot.sendMessage(chatId, `❌ File error: ${e.message}`); }
+    if (!uploaded?.ok && !uploaded?.path) {
+      return bot.sendMessage(chatId, `❌ Upload failed: ${uploaded?.error || "unknown error"}`);
+    }
+
+    const savedPath = uploaded.path || `/uploads/${doc.file_name}`;
+    const sizeKB    = (doc.file_size / 1024).toFixed(1);
+    const isText    = mime.startsWith("text/") || mime.includes("json") || mime.includes("xml") ||
+                      mime.includes("javascript") || mime.includes("python") ||
+                      /\.(js|ts|py|json|html|css|md|txt|sh|yaml|yml|jsx|tsx|env|toml|ini|cfg)$/i.test(doc.file_name);
+
+    await bot.sendMessage(chatId,
+      `✅ <b>File uploaded</b>\n` +
+      `📄 <code>${escHtml(doc.file_name)}</code> (${sizeKB} KB)\n` +
+      `📁 Saved: <code>${escHtml(savedPath)}</code>`,
+      { parse_mode: "HTML" }
+    );
+
+    if (caption) {
+      let prompt = `${caption}\n\n[File uploaded: ${savedPath}]`;
+      if (isText) {
+        const textContent = buf.toString("utf8").slice(0, 3000);
+        prompt += `\nContent:\n\`\`\`\n${textContent}\n\`\`\``;
+      }
+      await runAgent(chatId, prompt, session.model, session.persona, msg.message_id);
+    } else if (isText) {
+      const textContent = buf.toString("utf8").slice(0, 3000);
+      const autoPrompt  = `A file was uploaded: ${doc.file_name}\nSaved at: ${savedPath}\n\nContent preview:\n\`\`\`\n${textContent}\n\`\`\`\n\nBriefly describe what this file is.`;
+      await runAgent(chatId, autoPrompt, session.model, session.persona, msg.message_id);
+    }
+
+  } catch(e) { bot.sendMessage(chatId, `❌ Upload error: ${e.message}`); }
 });
 
 // ── MESSAGE EVENTS ────────────────────────────────────────────
@@ -1039,6 +1136,7 @@ console.log("\n  🤖 Telegram Agent Bot started");
 console.log(`  📡 Connected to: ${SERVER_URL}`);
 if (ALLOWED_USERS.length) console.log(`  🔒 Allowed users: ${ALLOWED_USERS.join(", ")}`);
 else console.log("  ⚠️  No ALLOWED_USERS set — open to everyone");
-console.log("\n  Commands: /start /model /persona /swarm /processes /kill /screenshot /status /cwd /cd /stop /clear\n");
+console.log("\n  Commands: /start /model /persona /swarm /processes /kill /screenshot /status /files /cwd /cd /stop /clear");
+console.log("  Upload: Send any document/file to save it to the workspace\n");
 
 bot.on("polling_error", e => console.error("Polling error:", e.message));

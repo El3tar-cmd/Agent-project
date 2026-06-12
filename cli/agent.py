@@ -61,9 +61,18 @@ SYSTEM_PROMPT = """You are NOVA — an advanced AI coding agent (2026). Senior f
 - git_status() — git status
 - git_diff(file?) — git diff
 
-### Web
+### Web & APIs
 - http_get(url) — fetch URL content
+- http_post(url, body, method, headers) — POST/PUT/PATCH to any API with JSON body
 - search_web(query) — search DuckDuckGo
+
+### File Discovery & Archives
+- find_files(pattern, directory, ext, maxdepth) — find files by name or extension
+- zip(action, archive, source, dest) — create/extract/list zip or tar.gz archives
+- diff_files(file1, file2) — unified diff between any two files
+
+### Code Quality
+- lint(file, linter) — run ESLint (JS), flake8 (Python), or syntax check
 
 ### Other
 - screenshot(url_or_path) — take screenshot
@@ -349,6 +358,7 @@ def main():
   /kill <id>         Kill a background process
   /attach <path>     Attach image to next message
   /screenshot <url>  Take a screenshot
+  /save [filename]   Export session to markdown file
   /cwd               Show current directory
   /cd <path>         Change directory
   continue           Resume a paused session
@@ -414,6 +424,39 @@ def main():
                 path = result.split("SCREENSHOT:")[1].split("\n")[0].strip()
                 pending_images.append(Path(path))
                 info("Screenshot attached to next message.")
+            continue
+
+        if lo.startswith("/save"):
+            parts = user.split(None, 1)
+            filename = parts[1].strip() if len(parts) > 1 else f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
+            if not filename.endswith(".md"):
+                filename += ".md"
+            try:
+                lines = [f"# Agent Session — {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"]
+                lines.append(f"**Model:** {MODEL}  |  **CWD:** {CWD[0]}\n\n---\n")
+                for msg in chat_history:
+                    role = msg.get("role", "?")
+                    content = msg.get("content", "")
+                    if role == "system":
+                        continue
+                    if role == "user" and content.startswith("[Tool result:"):
+                        lines.append(f"> {content[:200]}\n\n")
+                    elif role == "user":
+                        lines.append(f"### 👤 User\n{content}\n\n")
+                    elif role == "assistant":
+                        try:
+                            d = json.loads(content)
+                            if "final" in d:
+                                lines.append(f"### 🤖 Agent\n{d['final']}\n\n")
+                            elif "tool" in d:
+                                args_str = json.dumps(d.get("args", {}), ensure_ascii=False)[:200]
+                                lines.append(f"**Tool:** `{d['tool']}({args_str})`\n\n")
+                        except Exception:
+                            lines.append(f"### 🤖 Agent\n{content[:500]}\n\n")
+                Path(filename).write_text("".join(lines), encoding="utf-8")
+                ok(f"Session saved to {filename}")
+            except Exception as e:
+                err(f"Could not save: {e}")
             continue
 
         if lo == "/log":

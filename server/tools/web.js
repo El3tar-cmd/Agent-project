@@ -153,7 +153,46 @@ async function toolSearchWeb(query) {
   return `No results found for: ${query}\n\nTips:\n- Try a more specific topic (e.g., "React JavaScript library")\n- Avoid generic terms like "test"`;
 }
 
+// ─── http_post ─────────────────────────────────────────────────
+async function toolHttpPost(args) {
+  const url     = args.url;
+  const method  = (args.method || "POST").toUpperCase();
+  const body    = args.body || args.data || args.payload || {};
+  const headers = args.headers || {};
+
+  if (!url) return "ERROR: 'url' parameter required";
+  const finalUrl = url.startsWith("http") ? url : "https://" + url;
+
+  const bodyStr = typeof body === "string" ? body : JSON.stringify(body);
+  const finalHeaders = {
+    "Content-Type": "application/json",
+    "User-Agent": "Mozilla/5.0 (compatible; CodingAgent/1.0)",
+    ...headers,
+  };
+
+  try {
+    const res = await fetch(finalUrl, {
+      method: method,
+      headers: finalHeaders,
+      body: bodyStr,
+      signal: AbortSignal.timeout(20000),
+    });
+    const text = await res.text();
+    let pretty = text;
+    try { pretty = JSON.stringify(JSON.parse(text), null, 2); } catch {}
+    const truncated = pretty.length > 4000;
+    return (
+      `STATUS:${res.status}\nURL:${finalUrl}\nMETHOD:${method}\n\n` +
+      pretty.slice(0, 4000) +
+      (truncated ? "\n...[truncated]" : "")
+    );
+  } catch (e) {
+    return `ERROR: ${e.message}`;
+  }
+}
+
 module.exports = {
-  httpGet: a => toolHttpGet(a.url),
+  httpGet:  a => toolHttpGet(a.url),
+  httpPost: a => toolHttpPost(a),
   searchWeb: a => toolSearchWeb(a.query || a.q || a.search || ""),
 };

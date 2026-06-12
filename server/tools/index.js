@@ -10,6 +10,7 @@ const gitTools = require("./git");
 const pythonTools = require("./python");
 const webTools = require("./web");
 const screenshotTools = require("./screenshot");
+const extraTools = require("./extra");
 
 function toolCd(dir) {
   try {
@@ -55,10 +56,17 @@ const TOOLS = {
 
   // Web
   http_get:        webTools.httpGet,
+  http_post:       webTools.httpPost,
   search_web:      webTools.searchWeb,
 
   // Screenshot
   screenshot:      screenshotTools.screenshot,
+
+  // Extended Tools
+  find_files:      extraTools.findFiles,
+  zip:             extraTools.zip,
+  diff_files:      extraTools.diffFiles,
+  lint:            extraTools.lint,
 
   // Navigation
   cd:              a => toolCd(a.path || a.dir || a.directory || ""),

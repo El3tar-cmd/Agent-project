@@ -298,6 +298,148 @@ def grep(pattern, path="."):
     except Exception as e:
         return f"ERROR: {e}"
 
+def http_post(url, body=None, method="POST", headers=None):
+    """HTTP POST/PUT/PATCH request with JSON body."""
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+    h = {"Content-Type": "application/json",
+         "User-Agent": "Mozilla/5.0 (compatible; agent/1.0)"}
+    if headers:
+        h.update(headers)
+    payload = body if isinstance(body, str) else json.dumps(body or {})
+    try:
+        r = requests.request(method.upper(), url, data=payload, headers=h, timeout=20, allow_redirects=True)
+        ct = r.headers.get("content-type", "")
+        text = r.text
+        try:
+            text = json.dumps(r.json(), indent=2, ensure_ascii=False)
+        except Exception:
+            pass
+        return f"STATUS:{r.status_code}\nURL:{url}\nMETHOD:{method.upper()}\n\n{text[:4000]}" + ("…[truncated]" if len(text) > 4000 else "")
+    except Exception as e:
+        return f"ERROR: {e}"
+
+def find_files(pattern="", directory=".", ext="", maxdepth=8):
+    """Find files by name pattern or extension."""
+    IGNORE = {"node_modules", ".git", "dist", "__pycache__", ".venv"}
+    abs_dir = Path(resolve(directory))
+    results = []
+    pat_lower = pattern.lower()
+    ext_clean = ext.lstrip(".").lower() if ext else ""
+    try:
+        for p in abs_dir.rglob("*"):
+            if any(part in IGNORE for part in p.parts):
+                continue
+            rel = p.relative_to(abs_dir)
+            if len(rel.parts) > maxdepth:
+                continue
+            if ext_clean and p.suffix.lstrip(".").lower() != ext_clean:
+                continue
+            if pat_lower and pat_lower not in p.name.lower():
+                continue
+            results.append(str(rel))
+            if len(results) >= 100:
+                break
+        if not results:
+            return f"No files found matching '{pattern or ext or '*'}' in {directory}"
+        return f"Found {len(results)} file(s):\n\n" + "\n".join(results) + ("\n...[first 100 shown]" if len(results) == 100 else "")
+    except Exception as e:
+        return f"ERROR: {e}"
+
+def zip_archive(action="create", archive="", source=".", dest="."):
+    """Create, extract, or list zip/tar.gz archives."""
+    if not archive:
+        return "ERROR: 'archive' parameter required"
+    abs_archive = Path(resolve(archive))
+    action = action.lower()
+    is_tar = archive.endswith((".tar.gz", ".tgz", ".tar"))
+    try:
+        if action in ("create", "zip", "compress"):
+            abs_src = Path(resolve(source))
+            if is_tar:
+                cmd = f'tar -czf "{abs_archive}" -C "{abs_src.parent}" "{abs_src.name}"'
+            else:
+                cmd = f'cd "{abs_src.parent}" && zip -r "{abs_archive}" "{abs_src.name}"'
+            r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30, cwd=CWD[0])
+            if r.returncode == 0:
+                size = abs_archive.stat().st_size / 1024
+                return f"✅ Created: {archive} ({size:.1f} KB)\nSource: {source}"
+            return f"ERROR: {r.stderr.strip() or r.stdout.strip()}"
+        elif action in ("extract", "unzip", "decompress"):
+            abs_dest = Path(resolve(dest))
+            abs_dest.mkdir(parents=True, exist_ok=True)
+            if is_tar:
+                cmd = f'tar -xzf "{abs_archive}" -C "{abs_dest}"'
+            else:
+                cmd = f'unzip -o "{abs_archive}" -d "{abs_dest}"'
+            r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30, cwd=CWD[0])
+            return f"✅ Extracted → {dest}\n{r.stdout[:600]}" if r.returncode == 0 else f"ERROR: {r.stderr[:400]}"
+        elif action in ("list", "ls", "contents"):
+            cmd = f'tar -tzf "{abs_archive}"' if is_tar else f'unzip -l "{abs_archive}"'
+            r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=10, cwd=CWD[0])
+            return f"Contents of {archive}:\n{r.stdout[:3000]}"
+        return f"ERROR: unknown action '{action}'. Use: create | extract | list"
+    except Exception as e:
+        return f"ERROR: {e}"
+
+def diff_files(file1, file2):
+    """Show unified diff between two files."""
+    abs1, abs2 = Path(resolve(file1)), Path(resolve(file2))
+    if not abs1.exists():
+        return f"ERROR: file1 not found: {file1}"
+    if not abs2.exists():
+        return f"ERROR: file2 not found: {file2}"
+    try:
+        r = subprocess.run(
+            ["diff", "-u", "--label", file1, "--label", file2, str(abs1), str(abs2)],
+            capture_output=True, text=True, timeout=10
+        )
+        if r.returncode == 0:
+            return f"Files are identical:\n  {file1}\n  {file2}"
+        out = r.stdout
+        lines = out.split("\n")
+        added   = sum(1 for l in lines if l.startswith("+") and not l.startswith("+++"))
+        removed = sum(1 for l in lines if l.startswith("-") and not l.startswith("---"))
+        return f"--- {file1}  →  {file2}\n+{added} added, -{removed} removed\n\n{out[:5000]}" + ("…[truncated]" if len(out) > 5000 else "")
+    except Exception as e:
+        return f"ERROR: {e}"
+
+def lint(file, linter="auto"):
+    """Run linter on a code file (eslint for JS, flake8 for Python)."""
+    abs_file = Path(resolve(file))
+    if not abs_file.exists():
+        return f"ERROR: file not found: {file}"
+    ext = abs_file.suffix.lower()
+    hint = linter.lower()
+    try:
+        if hint in ("eslint", "js") or (hint == "auto" and ext in (".js", ".jsx", ".ts", ".tsx", ".mjs")):
+            local = Path(CWD[0]) / "node_modules" / ".bin" / "eslint"
+            eslint = str(local) if local.exists() else "npx eslint"
+            r = subprocess.run(f'{eslint} "{abs_file}" --format=compact --max-warnings=100',
+                               shell=True, capture_output=True, text=True, timeout=30, cwd=CWD[0])
+            return (r.stdout + r.stderr).strip() or "✅ No ESLint issues"
+        if hint in ("flake8", "python") or (hint == "auto" and ext == ".py"):
+            r = subprocess.run(f'python3 -m flake8 "{abs_file}" --max-line-length=120',
+                               shell=True, capture_output=True, text=True, timeout=20, cwd=CWD[0])
+            if r.returncode != 0 and (r.stdout or r.stderr):
+                return (r.stdout + r.stderr).strip()
+            r2 = subprocess.run(f'python3 -m py_compile "{abs_file}" && echo "Syntax OK"',
+                                shell=True, capture_output=True, text=True, timeout=10, cwd=CWD[0])
+            return r2.stdout.strip() or "✅ Syntax OK"
+        if hint == "json" or (hint == "auto" and ext == ".json"):
+            try:
+                json.loads(abs_file.read_text(encoding="utf-8"))
+                return "✅ Valid JSON"
+            except Exception as e:
+                return f"❌ Invalid JSON: {e}"
+        if hint in ("sh", "bash") or (hint == "auto" and ext in (".sh", ".bash")):
+            r = subprocess.run(f'bash -n "{abs_file}" && echo "Syntax OK"',
+                               shell=True, capture_output=True, text=True, timeout=10)
+            return (r.stdout + r.stderr).strip() or "✅ Shell syntax OK"
+        return f"Cannot auto-detect linter for '{ext}'. Specify: linter=eslint|flake8|json|sh"
+    except Exception as e:
+        return f"ERROR: {e}"
+
 def cd(path):
     try:
         abs_p = resolve(path)
@@ -403,6 +545,11 @@ TOOL_MAP = {
     "show_image":      lambda a: show_image(a.get("path", "")),
     "cd":              lambda a: cd(a.get("path", a.get("dir", ""))),
     "think":           lambda a: think(a.get("thought", a.get("reasoning", ""))),
+    "http_post":       lambda a: http_post(a.get("url",""), a.get("body", a.get("data",{})), a.get("method","POST"), a.get("headers")),
+    "find_files":      lambda a: find_files(a.get("pattern",""), a.get("directory", a.get("path",".")), a.get("ext",""), int(a.get("maxdepth",8))),
+    "zip":             lambda a: zip_archive(a.get("action","create"), a.get("file", a.get("archive","")), a.get("source","."), a.get("dest",".")),
+    "diff_files":      lambda a: diff_files(a.get("file1", a.get("a", a.get("old",""))), a.get("file2", a.get("b", a.get("new","")))),
+    "lint":            lambda a: lint(a.get("file", a.get("path",".")), a.get("linter", a.get("type","auto"))),
 }
 
 def execute_tool(name, args):

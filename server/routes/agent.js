@@ -334,4 +334,18 @@ router.post("/run", async (req, res) => {
   res.end();
 });
 
+// ── POST /api/tool — execute a single tool directly ──────────
+router.post("/tool", async (req, res) => {
+  const { tool, args = {} } = req.body;
+  if (!tool) return res.json({ error: "tool parameter required" });
+  const fn = TOOLS[tool];
+  if (!fn) return res.json({ error: `unknown tool: ${tool}` });
+  try {
+    const result = await fn(args);
+    res.json({ ok: true, tool, result: String(result ?? "") });
+  } catch (e) {
+    res.json({ ok: false, tool, error: e.message });
+  }
+});
+
 module.exports = router;

@@ -14,26 +14,42 @@ const TOOL_DOCS = `
 
 ### Filesystem
 - read_file: {"path": "file path"} — reads file with line numbers
-- read_lines: {"path": "file path", "start": 1, "end": 50} — read a specific range of lines
+- read_lines: {"path": "file path", "start": 1, "end": 50} — read specific line range (use for large files)
 - write_file: {"path": "file path", "content": "full file content"} — creates/overwrites a file
 - append_file: {"path": "file path", "content": "text to append"} — appends to a file
 - replace_text: {"path": "file path", "old": "exact text to find", "new": "replacement text"} — targeted edit
-- list_files: {"path": "directory path"} — lists files (call ONCE per directory — do not repeat)
-- search_in_files: {"pattern": "search text", "directory": "path"} — search across files
-- grep: {"pattern": "regex", "path": "directory"} — grep search
-- create_dir: {"path": "directory path"}
-- delete_file: {"path": "path"}
+- list_files: {"path": "directory path"} — lists files (call ONCE per directory)
+- search_in_files: {"pattern": "search text", "directory": "path"} — case-insensitive text search across files
+- grep: {"pattern": "regex", "path": "directory"} — regex grep across files
+- create_dir: {"path": "directory path"} — create directory and parents
+- delete_file: {"path": "file or directory path"} — delete file or directory
 
 ### Shell & Code
-- run_command: {"command": "shell command"} — run shell command
-- python_eval: {"code": "python code"} — run Python code
+- run_command: {"command": "shell command"} — run shell command, see stdout/stderr
+- python_eval: {"code": "python code"} — execute Python code inline
 
 ### Git
-- git_status: {} — git status
-- git_diff: {"file": "optional path"} — git diff
+- git_status: {} — current git status
+- git_diff: {"file": "optional specific file"} — show diff
+
+### Web & Network
+- http_get: {"url": "https://..."} — fetch a URL and return cleaned text content
+- http_post: {"url": "https://...", "body": {...}, "method": "POST", "headers": {}} — POST/PUT/PATCH to any API with JSON body
+- search_web: {"query": "search terms"} — search the web via DuckDuckGo
+
+### File Discovery & Archives
+- find_files: {"pattern": "name", "directory": ".", "ext": "js", "maxdepth": 8} — find files by name/extension
+- zip: {"action": "create|extract|list", "file": "out.zip", "source": "dir", "dest": "outdir"} — create or extract zip/tar.gz archives
+- diff_files: {"file1": "a.js", "file2": "b.js"} — unified diff between any two files
+
+### Code Quality
+- lint: {"file": "path/to/file.js", "linter": "eslint|flake8|json|sh"} — run linter on code files
+
+### Navigation
+- cd: {"path": "directory path"} — change current working directory
 
 ### Reasoning
-- think: {"thought": "your reasoning"} — plan before acting on complex tasks
+- think: {"thought": "your reasoning"} — internal planning step (no external side effects)
 
 ## CRITICAL RULES FOR MULTI-AGENT SWARM
 1. **TOOL CALLS ARE REQUIRED**: You MUST use write_file, append_file, or replace_text to actually save files.
@@ -41,7 +57,7 @@ const TOOL_DOCS = `
 2. **JSON Format**: Respond ONLY with a single valid JSON object. No markdown, no code fences.
    Escape all newlines as \\n inside JSON strings.
 3. **No repeated list_files**: Call list_files on any directory at most once. Use that knowledge.
-4. **Use read_lines**: For large files, use read_lines with start/end instead of reading the whole file again.
+4. **Use read_lines**: For large files, use read_lines with start/end instead of re-reading the whole file.
 5. **Execution Loop**: Call one tool per step, wait for result, then call next tool or finish.
 6. **Finish with result**: {"thought":"summary","result":"what was accomplished","files_changed":["path1"]}
 `;
