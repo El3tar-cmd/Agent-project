@@ -61,9 +61,22 @@ router.get("/log", (req, res) => {
   }
 });
 
-router.get("/models", async (req, res) => {
+router.get("/health", async (req, res) => {
+  const { OLLAMA_URL } = require("../../shared/constants");
   try {
-    const r = await fetch("http://localhost:11434/api/tags");
+    const r = await fetch(`${OLLAMA_URL}/api/tags`);
+    const d = await r.json();
+    const models = d.models?.map(m => m.name) || [];
+    res.json({ ok: true, ollama: true, models, ollama_url: OLLAMA_URL });
+  } catch (e) {
+    res.json({ ok: false, ollama: false, models: [], error: e.message, ollama_url: OLLAMA_URL });
+  }
+});
+
+router.get("/models", async (req, res) => {
+  const { OLLAMA_URL } = require("../../shared/constants");
+  try {
+    const r = await fetch(`${OLLAMA_URL}/api/tags`);
     const d = await r.json();
     res.json(d.models?.map(m => m.name) || []);
   } catch {

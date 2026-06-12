@@ -31,15 +31,27 @@ export function useAgent(fetchTree, refreshFiles, isMobile, setDesktopPanel) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [msgs]);
 
-  // Fetch available models on mount
+  const [ollamaOk, setOllamaOk] = useState(null); // null=checking, true=ok, false=error
+  const [ollamaError, setOllamaError] = useState("");
+
+  // Health check + fetch models on mount
   useEffect(() => {
-    fetch("/api/models")
+    fetch("/api/health")
       .then(r => r.json())
-      .then(ms => {
-        setModels(ms);
-        if (ms.length) setModel(ms[0]);
+      .then(h => {
+        setOllamaOk(h.ollama);
+        if (!h.ollama) {
+          setOllamaError(`Ollama غير متاح على ${h.ollama_url}\nشغّل Ollama أولاً: ollama serve`);
+        }
+        if (h.models?.length) {
+          setModels(h.models);
+          setModel(h.models[0]);
+        }
       })
-      .catch(() => {});
+      .catch(() => {
+        setOllamaOk(false);
+        setOllamaError("لا يمكن الاتصال بالسيرفر — تأكد أن npm run start شغّال");
+      });
   }, []);
 
   // Helper actions
@@ -303,6 +315,8 @@ export function useAgent(fetchTree, refreshFiles, isMobile, setDesktopPanel) {
     setImages,
     logs,
     setLogs,
+    ollamaOk,
+    ollamaError,
     abortRef,
     bottomRef,
     send,

@@ -15,8 +15,8 @@ const DANGEROUS = [
 /** Default Ollama model */
 const DEFAULT_MODEL = process.env.AGENT_MODEL || "qwen3-coder-next:cloud";
 
-/** Ollama API base URL */
-const OLLAMA_URL = "http://localhost:11434";
+/** Ollama API base URL — override via OLLAMA_URL in .env */
+const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
 
 /** Maximum agent steps before pausing (lowered to prevent token waste & loops) */
 const MAX_STEPS = 30;

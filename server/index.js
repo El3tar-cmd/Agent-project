@@ -20,7 +20,7 @@ const { initTerminal } = require("./routes/terminal");
 const { SCREENSHOT_DIR } = require("./tools/screenshot");
 
 const app = express();
-const PORT = 3131;
+const PORT = parseInt(process.env.PORT) || 3131;
 
 // ── MIDDLEWARES ────────────────────────────────────────────
 app.use(cors());

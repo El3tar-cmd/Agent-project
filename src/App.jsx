@@ -262,6 +262,29 @@ export default function App() {
           </div>
         </header>
 
+        {/* OLLAMA STATUS BANNER */}
+        {agent.ollamaOk === false && (
+          <div style={{
+            background: "rgba(248,81,73,.12)", borderBottom: "1px solid rgba(248,81,73,.35)",
+            padding: "7px 14px", display: "flex", alignItems: "center", gap: 8,
+            fontSize: 11, color: "var(--red)", flexShrink: 0
+          }}>
+            <span style={{ fontSize: 14 }}>⚠️</span>
+            <div style={{ flex: 1, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{agent.ollamaError}</div>
+            <button
+              onClick={() => fetch("/api/health").then(r=>r.json()).then(h=>{
+                if(h.ollama){ agent.setModel && h.models?.length && agent.setModel(h.models[0]); window.location.reload(); }
+              })}
+              style={{ flexShrink:0, background:"var(--red)", border:"none", borderRadius:5, color:"#fff", padding:"3px 9px", fontSize:10, cursor:"pointer", fontFamily:"inherit" }}
+            >إعادة المحاولة</button>
+          </div>
+        )}
+        {agent.ollamaOk === null && (
+          <div style={{ background:"var(--bg2)", borderBottom:"1px solid var(--border)", padding:"5px 14px", fontSize:10, color:"var(--fg3)", flexShrink:0 }}>
+            🔄 جاري التحقق من الاتصال…
+          </div>
+        )}
+
         {/* BODY */}
         <div className="body">
           {/* SIDEBAR */}
