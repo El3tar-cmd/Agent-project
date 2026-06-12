@@ -3,168 +3,318 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tool Reference - Coding Agent</title>
+    <title>Tool Reference — Coding Agent</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        :root {
-            --primary: #3b82f6;
-            --bg-dark: #0f172a;
-            --text-main: #f8fafc;
-        }
-        body {
-            background-color: var(--bg-dark);
-            color: var(--text-main);
-            font-family: 'Inter', system-ui, -apple-system, sans-serif;
-        }
-        .nav-link {
-            transition: all 0.2s ease;
-            border-left: 3px solid transparent;
-        }
-        .nav-link:hover {
-            background: rgba(59, 130, 246, 0.1);
-            border-left-color: var(--primary);
-        }
-        .card {
-            background: rgba(30, 41, 59, 0.5);
-            border: 1px solid rgba(51, 65, 85, 1);
-            border-radius: 0.75rem;
-        }
-        code {
-            background: #1e293b;
-            padding: 0.2rem 0.4rem;
-            border-radius: 0.25rem;
-            font-family: 'Fira Code', monospace;
-            font-size: 0.9em;
-        }
-        .tool-row:hover {
-            background: rgba(51, 65, 85, 0.4);
-        }
+        :root { --primary: #3b82f6; --bg-dark: #0f172a; --text-main: #f8fafc; }
+        body { background-color: var(--bg-dark); color: var(--text-main); font-family: 'Inter', system-ui, sans-serif; }
+        .nav-link { transition: all .2s; border-left: 3px solid transparent; }
+        .nav-link:hover { background: rgba(59,130,246,.1); border-left-color: var(--primary); }
+        .card { background: rgba(30,41,59,.5); border: 1px solid rgba(51,65,85,1); border-radius: .75rem; }
+        code { background: #1e293b; padding: .2rem .4rem; border-radius: .25rem; font-family: 'Fira Code', monospace; font-size: .88em; color: #93c5fd; }
+        .tool-row:hover { background: rgba(51,65,85,.4); }
+        .badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: .7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+        .badge-fs  { background: rgba(59,130,246,.15); color: #60a5fa; border: 1px solid rgba(59,130,246,.3); }
+        .badge-sh  { background: rgba(16,185,129,.15); color: #34d399; border: 1px solid rgba(16,185,129,.3); }
+        .badge-web { background: rgba(139,92,246,.15); color: #a78bfa; border: 1px solid rgba(139,92,246,.3); }
+        .badge-git { background: rgba(245,158,11,.15); color: #fbbf24; border: 1px solid rgba(245,158,11,.3); }
+        .badge-arc { background: rgba(251,146,60,.15); color: #fb923c; border: 1px solid rgba(251,146,60,.3); }
+        .badge-new { background: rgba(52,211,153,.18); color: #6ee7b7; border: 1px solid rgba(52,211,153,.35); }
+        .category-header { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: #64748b; padding: 12px 24px 6px; }
     </style>
 </head>
 <body class="flex min-h-screen">
-    <!-- Sidebar -->
     <aside class="w-64 bg-slate-900 border-r border-slate-800 flex flex-col fixed h-full">
         <div class="p-6">
             <div class="flex items-center gap-3 text-blue-400 font-bold text-xl">
-                <i class="fas fa-robot"></i>
-                <span>Coding Agent</span>
+                <i class="fas fa-robot"></i><span>Coding Agent</span>
             </div>
         </div>
         <nav class="flex-1 px-4 space-y-1">
-            <a href="index.html" class="nav-link block px-4 py-2 rounded text-slate-400 hover:text-white">🏠 Introduction</a>
-            <a href="setup.html" class="nav-link block px-4 py-2 rounded text-slate-400 hover:text-white">🚀 Getting Started</a>
-            <a href="tools.html" class="nav-link block px-4 py-2 rounded text-blue-400 font-medium bg-slate-800">🛠️ Tool Reference</a>
+            <a href="index.html"        class="nav-link block px-4 py-2 rounded text-slate-400 hover:text-white">🏠 Introduction</a>
+            <a href="setup.html"        class="nav-link block px-4 py-2 rounded text-slate-400 hover:text-white">🚀 Getting Started</a>
+            <a href="tools.html"        class="nav-link block px-4 py-2 rounded text-blue-400 font-medium bg-slate-800">🛠️ Tool Reference</a>
             <a href="architecture.html" class="nav-link block px-4 py-2 rounded text-slate-400 hover:text-white">🏗️ Architecture</a>
-            <a href="faq.html" class="nav-link block px-4 py-2 rounded text-slate-400 hover:text-white">❓ FAQ</a>
+            <a href="faq.html"          class="nav-link block px-4 py-2 rounded text-slate-400 hover:text-white">❓ FAQ</a>
         </nav>
-        <div class="p-6 text-xs text-slate-500 border-t border-slate-800">
-            v1.0.0 &bull; 2026 Edition
-        </div>
+        <div class="p-6 text-xs text-slate-500 border-t border-slate-800">v2.0.0 &bull; 24 Tools</div>
     </aside>
 
-    <!-- Main Content -->
-    <main class="ml-64 flex-1 p-12 max-w-5xl">
-        <header class="mb-12">
-            <h1 class="text-5xl font-extrabold mb-4 tracking-tight">Tool <span class="text-blue-500">Reference</span></h1>
-            <p class="text-xl text-slate-400 leading-relaxed">
-                The agent interacts with your system through a set of predefined tools. 
-                These tools allow it to read, write, execute, and explore your codebase autonomously.
+    <main class="ml-64 flex-1 p-10 max-w-5xl">
+        <header class="mb-10">
+            <h1 class="text-5xl font-extrabold mb-3 tracking-tight">Tool <span class="text-blue-500">Reference</span></h1>
+            <p class="text-lg text-slate-400 leading-relaxed">
+                The agent has access to <strong class="text-white">24 tools</strong> that let it read, write, search, execute, archive, diff, lint, and call external APIs — fully autonomously.
             </p>
+            <div class="flex flex-wrap gap-2 mt-4">
+                <span class="badge badge-fs">📁 File System</span>
+                <span class="badge badge-sh">💻 Shell / Code</span>
+                <span class="badge badge-web">🌐 Web / APIs</span>
+                <span class="badge badge-git">📊 Git</span>
+                <span class="badge badge-arc">🗜️ Archive / Diff</span>
+                <span class="badge badge-new">✨ New in v2</span>
+            </div>
         </header>
 
-        <section class="space-y-8">
+        <section class="space-y-6">
+
+            <!-- FILE SYSTEM -->
             <div class="card overflow-hidden">
+                <div class="category-header">📁 File System — Read, Write, Search</div>
                 <table class="w-full text-left border-collapse">
                     <thead>
-                        <tr class="bg-slate-800 text-slate-300 uppercase text-xs font-bold">
-                            <th class="px-6 py-4">Tool Name</th>
-                            <th class="px-6 py-4">Description</th>
-                            <th class="px-6 py-4">Use Case</th>
+                        <tr class="bg-slate-800/60 text-slate-400 text-xs font-semibold uppercase">
+                            <th class="px-6 py-3">Tool</th>
+                            <th class="px-6 py-3">Parameters</th>
+                            <th class="px-6 py-3">Description</th>
                         </tr>
                     </thead>
-                    <tbody class="text-slate-300 divide-y divide-slate-700">
+                    <tbody class="text-slate-300 divide-y divide-slate-700/50">
                         <tr class="tool-row">
-                            <td class="px-6 py-4 font-mono text-blue-400">read_file</td>
-                            <td class="px-6 py-4">Reads the full content of a specific file.</td>
-                            <td class="px-6 py-4 text-sm">Analyzing existing code or reading config files.</td>
+                            <td class="px-6 py-4"><code>read_file</code></td>
+                            <td class="px-6 py-4 text-xs text-slate-400"><code>path</code></td>
+                            <td class="px-6 py-4 text-sm">Read full file content with line numbers.</td>
                         </tr>
                         <tr class="tool-row">
-                            <td class="px-6 py-4 font-mono text-blue-400">write_file</td>
-                            <td class="px-6 py-4">Creates a new file or overwrites an existing one.</td>
-                            <td class="px-6 py-4 text-sm">Implementing new features or creating scripts.</td>
+                            <td class="px-6 py-4"><code>read_lines</code></td>
+                            <td class="px-6 py-4 text-xs text-slate-400"><code>path, start, end</code></td>
+                            <td class="px-6 py-4 text-sm">Read a specific line range from a large file.</td>
                         </tr>
                         <tr class="tool-row">
-                            <td class="px-6 py-4 font-mono text-blue-400">replace_text</td>
-                            <td class="px-6 py-4">Performs a targeted find-and-replace in a file.</td>
-                            <td class="px-6 py-4 text-sm">Applying bug fixes or small logic changes.</td>
+                            <td class="px-6 py-4"><code>write_file</code></td>
+                            <td class="px-6 py-4 text-xs text-slate-400"><code>path, content</code></td>
+                            <td class="px-6 py-4 text-sm">Create or overwrite a file with new content.</td>
                         </tr>
                         <tr class="tool-row">
-                            <td class="px-6 py-4 font-mono text-blue-400">run_command</td>
-                            <td class="px-6 py-4">Executes a shell command and returns the output.</td>
-                            <td class="px-6 py-4 text-sm">Running tests, installing packages, or checking logs.</td>
+                            <td class="px-6 py-4"><code>append_file</code></td>
+                            <td class="px-6 py-4 text-xs text-slate-400"><code>path, content</code></td>
+                            <td class="px-6 py-4 text-sm">Append content to the end of a file.</td>
                         </tr>
                         <tr class="tool-row">
-                            <td class="px-6 py-4 font-mono text-blue-400">list_files</td>
-                            <td class="px-6 py-4">Lists all files and folders in a directory.</td>
-                            <td class="px-6 py-4 text-sm">Exploring the project structure.</td>
+                            <td class="px-6 py-4"><code>replace_text</code></td>
+                            <td class="px-6 py-4 text-xs text-slate-400"><code>path, old, new</code></td>
+                            <td class="px-6 py-4 text-sm">Targeted find-and-replace. Exact-match string substitution.</td>
                         </tr>
                         <tr class="tool-row">
-                            <td class="px-6 py-4 font-mono text-blue-400">search_in_files</td>
-                            <td class="px-6 py-4">Recursively searches for a pattern across files.</td>
-                            <td class="px-6 py-4 text-sm">Finding where a function or variable is used.</td>
+                            <td class="px-6 py-4"><code>list_files</code></td>
+                            <td class="px-6 py-4 text-xs text-slate-400"><code>path</code></td>
+                            <td class="px-6 py-4 text-sm">List all files and folders in a directory with icons.</td>
                         </tr>
                         <tr class="tool-row">
-                            <td class="px-6 py-4 font-mono text-blue-400">create_dir</td>
-                            <td class="px-6 py-4">Creates a new directory.</td>
-                            <td class="px-6 py-4 text-sm">Organizing new modules or assets.</td>
+                            <td class="px-6 py-4"><code>search_in_files</code></td>
+                            <td class="px-6 py-4 text-xs text-slate-400"><code>pattern, directory</code></td>
+                            <td class="px-6 py-4 text-sm">Case-insensitive recursive text search across all files.</td>
                         </tr>
                         <tr class="tool-row">
-                            <td class="px-6 py-4 font-mono text-blue-400">delete_file</td>
-                            <td class="px-6 py-4">Deletes a file or directory.</td>
-                            <td class="px-6 py-4 text-sm">Cleaning up temporary files or removing old code.</td>
+                            <td class="px-6 py-4"><code>grep</code></td>
+                            <td class="px-6 py-4 text-xs text-slate-400"><code>pattern, path, context?</code></td>
+                            <td class="px-6 py-4 text-sm">Regex search with surrounding context lines.</td>
                         </tr>
                         <tr class="tool-row">
-                            <td class="px-6 py-4 font-mono text-blue-400">http_get</td>
-                            <td class="px-6 py-4">Fetches content from a URL.</td>
-                            <td class="px-6 py-4 text-sm">Reading API documentation or external resources.</td>
+                            <td class="px-6 py-4"><code>create_dir</code></td>
+                            <td class="px-6 py-4 text-xs text-slate-400"><code>path</code></td>
+                            <td class="px-6 py-4 text-sm">Create directory recursively (mkdir -p).</td>
                         </tr>
                         <tr class="tool-row">
-                            <td class="px-6 py-4 font-mono text-blue-400">python_eval</td>
-                            <td class="px-6 py-4">Executes a snippet of Python code.</td>
-                            <td class="px-6 py-4 text-sm">Performing complex calculations or data processing.</td>
+                            <td class="px-6 py-4"><code>delete_file</code></td>
+                            <td class="px-6 py-4 text-xs text-slate-400"><code>path</code></td>
+                            <td class="px-6 py-4 text-sm">Delete a file or directory. Requires confirmation in Web UI.</td>
                         </tr>
                         <tr class="tool-row">
-                            <td class="px-6 py-4 font-mono text-blue-400">git_status</td>
-                            <td class="px-6 py-4">Shows the current git status.</td>
-                            <td class="px-6 py-4 text-sm">Checking for uncommitted changes.</td>
-                        </tr>
-                        <tr class="tool-row">
-                            <td class="px-6 py-4 font-mono text-blue-400">git_diff</td>
-                            <td class="px-6 py-4">Shows the diff of changes.</td>
-                            <td class="px-6 py-4 text-sm">Reviewing what the agent has modified.</td>
-                        </tr>
-                        <tr class="tool-row">
-                            <td class="px-6 py-4 font-mono text-blue-400">grep</td>
-                            <td class="px-6 py-4">Searches for a pattern using grep.</td>
-                            <td class="px-6 py-4 text-sm">Fast text searching in large files.</td>
+                            <td class="px-6 py-4">
+                                <code>find_files</code>
+                                <span class="ml-2 badge badge-new">new</span>
+                            </td>
+                            <td class="px-6 py-4 text-xs text-slate-400"><code>pattern?, directory, ext?, maxdepth?</code></td>
+                            <td class="px-6 py-4 text-sm">Find files by name pattern or extension. Skips node_modules/.git automatically. Returns up to 100 results.</td>
                         </tr>
                     </tbody>
                 </table>
             </div>
 
+            <!-- SHELL & CODE -->
+            <div class="card overflow-hidden">
+                <div class="category-header">💻 Shell & Code Execution</div>
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-800/60 text-slate-400 text-xs font-semibold uppercase">
+                            <th class="px-6 py-3">Tool</th>
+                            <th class="px-6 py-3">Parameters</th>
+                            <th class="px-6 py-3">Description</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-slate-300 divide-y divide-slate-700/50">
+                        <tr class="tool-row">
+                            <td class="px-6 py-4"><code>run_command</code></td>
+                            <td class="px-6 py-4 text-xs text-slate-400"><code>command, background?, timeout?</code></td>
+                            <td class="px-6 py-4 text-sm">Execute any shell command. Optional background mode for long-running processes (servers, watchers).</td>
+                        </tr>
+                        <tr class="tool-row">
+                            <td class="px-6 py-4"><code>python_eval</code></td>
+                            <td class="px-6 py-4 text-xs text-slate-400"><code>code</code></td>
+                            <td class="px-6 py-4 text-sm">Execute Python code in-process. Useful for math, data processing, and quick scripts.</td>
+                        </tr>
+                        <tr class="tool-row">
+                            <td class="px-6 py-4">
+                                <code>lint</code>
+                                <span class="ml-2 badge badge-new">new</span>
+                            </td>
+                            <td class="px-6 py-4 text-xs text-slate-400"><code>file, linter?</code></td>
+                            <td class="px-6 py-4 text-sm">Run linters: <strong>ESLint</strong> for .js/.jsx/.ts/.tsx, <strong>flake8</strong> for .py, JSON validator for .json, <code>bash -n</code> for .sh. Auto-detects from extension.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- WEB & APIs -->
+            <div class="card overflow-hidden">
+                <div class="category-header">🌐 Web & External APIs</div>
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-800/60 text-slate-400 text-xs font-semibold uppercase">
+                            <th class="px-6 py-3">Tool</th>
+                            <th class="px-6 py-3">Parameters</th>
+                            <th class="px-6 py-3">Description</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-slate-300 divide-y divide-slate-700/50">
+                        <tr class="tool-row">
+                            <td class="px-6 py-4"><code>http_get</code></td>
+                            <td class="px-6 py-4 text-xs text-slate-400"><code>url</code></td>
+                            <td class="px-6 py-4 text-sm">Fetch a URL and return cleaned text content. Strips HTML tags automatically.</td>
+                        </tr>
+                        <tr class="tool-row">
+                            <td class="px-6 py-4">
+                                <code>http_post</code>
+                                <span class="ml-2 badge badge-new">new</span>
+                            </td>
+                            <td class="px-6 py-4 text-xs text-slate-400"><code>url, body, method?, headers?</code></td>
+                            <td class="px-6 py-4 text-sm">POST/PUT/PATCH to any REST API with a JSON body and custom headers. Returns status code + response body.</td>
+                        </tr>
+                        <tr class="tool-row">
+                            <td class="px-6 py-4"><code>search_web</code></td>
+                            <td class="px-6 py-4 text-xs text-slate-400"><code>query</code></td>
+                            <td class="px-6 py-4 text-sm">Search DuckDuckGo and return the top results with titles, URLs, and snippets.</td>
+                        </tr>
+                        <tr class="tool-row">
+                            <td class="px-6 py-4"><code>screenshot</code></td>
+                            <td class="px-6 py-4 text-xs text-slate-400"><code>url_or_path, fullPage?</code></td>
+                            <td class="px-6 py-4 text-sm">Take a screenshot of a URL or local HTML file via Puppeteer. Saves as PNG.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- ARCHIVE & DIFF -->
+            <div class="card overflow-hidden">
+                <div class="category-header">🗜️ Archives & Diff</div>
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-800/60 text-slate-400 text-xs font-semibold uppercase">
+                            <th class="px-6 py-3">Tool</th>
+                            <th class="px-6 py-3">Parameters</th>
+                            <th class="px-6 py-3">Description</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-slate-300 divide-y divide-slate-700/50">
+                        <tr class="tool-row">
+                            <td class="px-6 py-4">
+                                <code>zip</code>
+                                <span class="ml-2 badge badge-new">new</span>
+                            </td>
+                            <td class="px-6 py-4 text-xs text-slate-400"><code>action, file, source?, dest?</code></td>
+                            <td class="px-6 py-4 text-sm">
+                                <strong>create</strong> — zip or tar.gz an entire directory.<br>
+                                <strong>extract</strong> — unpack to a destination folder.<br>
+                                <strong>list</strong> — list archive contents without extracting.
+                            </td>
+                        </tr>
+                        <tr class="tool-row">
+                            <td class="px-6 py-4">
+                                <code>diff_files</code>
+                                <span class="ml-2 badge badge-new">new</span>
+                            </td>
+                            <td class="px-6 py-4 text-xs text-slate-400"><code>file1, file2</code></td>
+                            <td class="px-6 py-4 text-sm">Unified diff between any two files. Reports lines added/removed. Identical files return a clear message.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- GIT -->
+            <div class="card overflow-hidden">
+                <div class="category-header">📊 Git Operations</div>
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-800/60 text-slate-400 text-xs font-semibold uppercase">
+                            <th class="px-6 py-3">Tool</th>
+                            <th class="px-6 py-3">Parameters</th>
+                            <th class="px-6 py-3">Description</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-slate-300 divide-y divide-slate-700/50">
+                        <tr class="tool-row">
+                            <td class="px-6 py-4"><code>git_status</code></td>
+                            <td class="px-6 py-4 text-xs text-slate-400">—</td>
+                            <td class="px-6 py-4 text-sm">Show the current git status (modified, staged, untracked files).</td>
+                        </tr>
+                        <tr class="tool-row">
+                            <td class="px-6 py-4"><code>git_diff</code></td>
+                            <td class="px-6 py-4 text-xs text-slate-400"><code>file?</code></td>
+                            <td class="px-6 py-4 text-sm">Show unified diff for a specific file or all changes.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- NAVIGATION & REASONING -->
+            <div class="card overflow-hidden">
+                <div class="category-header">🧭 Navigation & Reasoning</div>
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-800/60 text-slate-400 text-xs font-semibold uppercase">
+                            <th class="px-6 py-3">Tool</th>
+                            <th class="px-6 py-3">Parameters</th>
+                            <th class="px-6 py-3">Description</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-slate-300 divide-y divide-slate-700/50">
+                        <tr class="tool-row">
+                            <td class="px-6 py-4"><code>cd</code></td>
+                            <td class="px-6 py-4 text-xs text-slate-400"><code>path</code></td>
+                            <td class="px-6 py-4 text-sm">Change the agent's working directory. Persists across tool calls in the same session.</td>
+                        </tr>
+                        <tr class="tool-row">
+                            <td class="px-6 py-4"><code>think</code></td>
+                            <td class="px-6 py-4 text-xs text-slate-400"><code>thought</code></td>
+                            <td class="px-6 py-4 text-sm">Internal reasoning step with no external side effects. Used for planning before complex multi-step tasks.</td>
+                        </tr>
+                        <tr class="tool-row">
+                            <td class="px-6 py-4"><code>ask_human</code></td>
+                            <td class="px-6 py-4 text-xs text-slate-400"><code>question</code></td>
+                            <td class="px-6 py-4 text-sm">Pause execution and ask the user a clarifying question. Times out after 2 minutes.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Security Note -->
             <div class="card p-8">
-                <h3 class="text-2xl font-bold mb-4 flex items-center gap-2">
-                    <i class="fas fa-shield-halved text-orange-500"></i> Security Note
+                <h3 class="text-xl font-bold mb-3 flex items-center gap-2">
+                    <i class="fas fa-shield-halved text-orange-400"></i> Security Note
                 </h3>
-                <p class="text-slate-400 leading-relaxed">
-                    Because the agent has the ability to execute shell commands (<code class="text-blue-300">run_command</code>) and modify files, it is highly recommended to run the agent in a <strong class="text-white">sandboxed environment</strong> (such as a Docker container or a dedicated VM). Never run the agent with root/administrator privileges on a production machine.
+                <p class="text-slate-400 leading-relaxed text-sm">
+                    Tools like <code>run_command</code>, <code>delete_file</code>, and <code>write_file</code> have real side effects.
+                    The Web UI requires confirmation before <code>delete_file</code> runs.
+                    It is strongly recommended to run the agent in a <strong class="text-white">sandboxed or development environment</strong> — never on a production machine with sensitive data.
                 </p>
             </div>
+
         </section>
 
-        <footer class="mt-20 pt-8 border-t border-slate-800 text-center text-slate-500">
-            <p>&copy; 2026 Coding Agent Project. Built for the future of software engineering.</p>
+        <footer class="mt-16 pt-8 border-t border-slate-800 text-center text-slate-500 text-sm">
+            &copy; 2026 Coding Agent &bull; 24 Tools &bull; MIT License
         </footer>
     </main>
 </body>

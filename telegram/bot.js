@@ -772,19 +772,29 @@ bot.onText(/\/start/, async msg => {
   const name = msg.from?.first_name || "there";
   bot.sendMessage(msg.chat.id,
     `👋 <b>Hello ${escHtml(name)}!</b>\n\n` +
-    `I'm your local AI coding agent.\n\n` +
-    `<b>Commands:</b>\n` +
-    `/model — switch Ollama model\n` +
-    `/persona — switch agent persona\n` +
-    `/swarm &lt;task&gt; — run multi-agent swarm\n` +
+    `I'm your local AI coding agent — powered by Ollama.\n\n` +
+    `<b>🤖 Agent</b>\n` +
+    `/stop — stop the running agent\n` +
+    `/clear — clear session history\n` +
+    `/skip — skip ask_human prompt\n\n` +
+    `<b>🖥 Workspace</b>\n` +
     `/files — list workspace files\n` +
-    `/status — server status\n` +
     `/cwd — show working directory\n` +
     `/cd &lt;path&gt; — change directory\n` +
-    `/stop — stop running agent\n` +
-    `/clear — clear session\n\n` +
-    `📎 Send any <b>file</b> to upload it to the workspace!\n` +
-    `Just type any message to chat with the agent!`,
+    `/status — server status &amp; model info\n` +
+    `/screenshot &lt;url&gt; — take screenshot\n\n` +
+    `<b>⚙️ Configuration</b>\n` +
+    `/model — switch Ollama model\n` +
+    `/persona — switch agent persona\n\n` +
+    `<b>🐝 Swarm</b>\n` +
+    `/swarm &lt;task&gt; — run multi-agent swarm\n\n` +
+    `<b>📊 Processes</b>\n` +
+    `/processes — list background processes\n` +
+    `/kill &lt;id&gt; — kill a background process\n\n` +
+    `<b>📎 File Upload</b>\n` +
+    `Send any <b>file</b> → saved to workspace (text files auto-analyzed)\n` +
+    `Send a <b>photo</b> → visual analysis by agent\n\n` +
+    `Just type any message to chat! 💬`,
     { parse_mode: "HTML" }
   );
 });
